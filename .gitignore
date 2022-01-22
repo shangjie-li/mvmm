@@ -1,0 +1,12 @@
+**__pycache__**
+**build**
+**egg-info**
+**dist**
+data/kitti/gt_database
+data/kitti/training
+data/kitti/testing
+data/kitti/*.pkl
+*.pyc
+*.so
+output*
+weights
