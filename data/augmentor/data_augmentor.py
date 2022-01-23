@@ -12,9 +12,10 @@ class DataAugmentor(object):
         self.logger = logger
 
         self.data_augmentor_queue = []
-        for cur_cfg in augmentor_configs:
-            cur_augmentor = getattr(self, cur_cfg.NAME)(config=cur_cfg)
-            self.data_augmentor_queue.append(cur_augmentor)
+        if augmentor_configs is not None:
+            for cur_cfg in augmentor_configs:
+                cur_augmentor = getattr(self, cur_cfg.NAME)(config=cur_cfg)
+                self.data_augmentor_queue.append(cur_augmentor)
 
     def gt_sampling(self, config=None):
         db_sampler = database_sampler.DataBaseSampler(
