@@ -56,11 +56,22 @@ if __name__ == '__main__':
                 print(val)
         print()
         
-        V.draw_scenes(
-            points=data_dict['points'].reshape(-1, 7),
-            ref_boxes=data_dict['gt_boxes'].reshape(-1, 8)[:, :7],
-            ref_scores=None,
-            ref_labels=data_dict['gt_boxes'].reshape(-1, 8)[:, 7].astype(np.int),
-            point_colors=data_dict['points'].reshape(-1, 7)[:, -3:]
-        )
+        if dataset.used_feature_list == ['x', 'y', 'z', 'intensity', 'r', 'g', 'b']:
+            V.draw_scenes(
+                points=data_dict['colored_points'].reshape(-1, 7),
+                ref_boxes=data_dict['gt_boxes'].reshape(-1, 8)[:, :7],
+                ref_scores=None,
+                ref_labels=data_dict['gt_boxes'].reshape(-1, 8)[:, 7].astype(np.int),
+                point_colors=data_dict['colored_points'].reshape(-1, 7)[:, -3:]
+            )
+        elif dataset.used_feature_list == ['x', 'y', 'z', 'intensity']:
+            V.draw_scenes(
+                points=data_dict['colored_points'].reshape(-1, 7),
+                ref_boxes=data_dict['gt_boxes'].reshape(-1, 8)[:, :7],
+                ref_scores=None,
+                ref_labels=data_dict['gt_boxes'].reshape(-1, 8)[:, 7].astype(np.int),
+                point_colors=np.ones((data_dict['colored_points'].reshape(-1, 7).shape[0], 3))
+            )
+        else:
+            raise NotImplementedError
 

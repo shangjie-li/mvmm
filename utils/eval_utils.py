@@ -59,13 +59,24 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
         with torch.no_grad():
             pred_dicts, ret_dict = model(batch_dict)
             if display:
-                V.draw_scenes(
-                    points=batch_dict['points'][:, 1:].cpu().numpy(),
-                    ref_boxes=pred_dicts[0]['pred_boxes'],
-                    ref_scores=pred_dicts[0]['pred_scores'],
-                    ref_labels=pred_dicts[0]['pred_labels'],
-                    point_colors=batch_dict['points'][:, -3:].cpu().numpy()
-                )
+                if dataset.used_feature_list == ['x', 'y', 'z', 'intensity', 'r', 'g', 'b']:
+                    V.draw_scenes(
+                        points=batch_dict['colored_points'][:, 1:].cpu().numpy(),
+                        ref_boxes=pred_dicts[0]['pred_boxes'],
+                        ref_scores=pred_dicts[0]['pred_scores'],
+                        ref_labels=pred_dicts[0]['pred_labels'],
+                        point_colors=batch_dict['colored_points'][:, -3:].cpu().numpy()
+                    )
+                elif dataset.used_feature_list == ['x', 'y', 'z', 'intensity']:
+                    V.draw_scenes(
+                        points=batch_dict['colored_points'][:, 1:].cpu().numpy(),
+                        ref_boxes=pred_dicts[0]['pred_boxes'],
+                        ref_scores=pred_dicts[0]['pred_scores'],
+                        ref_labels=pred_dicts[0]['pred_labels'],
+                        point_colors=np.ones((batch_dict['colored_points'].shape[0], 3))
+                    )
+                else:
+                    raise NotImplementedError
     
         disp_dict = {}
 

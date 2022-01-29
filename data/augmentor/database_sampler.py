@@ -11,11 +11,11 @@ from utils import box_utils
 
 
 class DataBaseSampler(object):
-    def __init__(self, root_path, sampler_cfg, class_names, num_point_features, logger=None):
+    def __init__(self, root_path, sampler_cfg, class_names, src_point_features, logger=None):
         self.root_path = root_path
         self.sampler_cfg = sampler_cfg
         self.class_names = class_names
-        self.num_point_features = num_point_features
+        self.src_point_features = src_point_features
         self.logger = logger
         
         self.db_infos = {}
@@ -104,7 +104,7 @@ class DataBaseSampler(object):
     def add_sampled_boxes_to_scene(self, data_dict, sampled_boxes, total_valid_sampled_dict):
         gt_boxes = data_dict['gt_boxes']
         gt_names = data_dict['gt_names']
-        points = data_dict['points']
+        points = data_dict['colored_points']
         
         sampled_boxes, mv_height = self.put_boxes_on_road_planes(
             sampled_boxes, data_dict['road_plane'], data_dict['calib']
@@ -114,11 +114,9 @@ class DataBaseSampler(object):
         obj_points_list = []
         for idx, info in enumerate(total_valid_sampled_dict):
             file_path = self.root_path / info['path']
-            obj_points = np.fromfile(str(file_path), dtype=np.float32).reshape(-1, self.num_point_features)
+            obj_points = np.fromfile(str(file_path), dtype=np.float32).reshape(-1, self.src_point_features)
             obj_points[:, :3] += info['box3d_lidar'][:3]
             obj_points[:, 2] -= mv_height[idx] # adjust the height of obj_points
-            #~ points_new = (obj_points[:-1] + obj_points[1:]) / 2
-            #~ obj_points = np.concatenate([obj_points, points_new], axis=0)
             obj_points_list.append(obj_points)
         obj_points = np.concatenate(obj_points_list, axis=0)
         
@@ -133,7 +131,7 @@ class DataBaseSampler(object):
         
         data_dict['gt_boxes'] = gt_boxes
         data_dict['gt_names'] = gt_names
-        data_dict['points'] = points
+        data_dict['colored_points'] = points
         return data_dict
 
     def __call__(self, data_dict):

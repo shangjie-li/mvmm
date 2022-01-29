@@ -5,10 +5,10 @@ from utils import augmentor_utils
 
 
 class DataAugmentor(object):
-    def __init__(self, root_path, augmentor_configs, class_names, num_point_features, logger=None):
+    def __init__(self, root_path, augmentor_configs, class_names, src_point_features, logger=None):
         self.root_path = root_path
         self.class_names = class_names
-        self.num_point_features = num_point_features
+        self.src_point_features = src_point_features
         self.logger = logger
 
         self.data_augmentor_queue = []
@@ -22,7 +22,7 @@ class DataAugmentor(object):
             root_path=self.root_path,
             sampler_cfg=config,
             class_names=self.class_names,
-            num_point_features=self.num_point_features,
+            src_point_features=self.src_point_features,
             logger=self.logger
         )
         return db_sampler
@@ -38,14 +38,13 @@ class DataAugmentor(object):
     def random_world_flip(self, data_dict=None, config=None):
         if data_dict is None:
             return partial(self.random_world_flip, config=config)
-        gt_boxes, points = data_dict['gt_boxes'], data_dict['points']
         for cur_axis in config['ALONG_AXIS_LIST']:
             assert cur_axis in ['x', 'y']
             gt_boxes, points = getattr(augmentor_utils, 'random_flip_along_%s' % cur_axis)(
-                gt_boxes, points,
+                data_dict['gt_boxes'], data_dict['colored_points'],
             )
         data_dict['gt_boxes'] = gt_boxes
-        data_dict['points'] = points
+        data_dict['colored_points'] = points
         return data_dict
 
     def random_world_rotation(self, data_dict=None, config=None):
@@ -55,20 +54,20 @@ class DataAugmentor(object):
         if not isinstance(rot_range, list):
             rot_range = [-rot_range, rot_range]
         gt_boxes, points = augmentor_utils.global_rotation(
-            data_dict['gt_boxes'], data_dict['points'], rot_range=rot_range
+            data_dict['gt_boxes'], data_dict['colored_points'], rot_range=rot_range
         )
         data_dict['gt_boxes'] = gt_boxes
-        data_dict['points'] = points
+        data_dict['colored_points'] = points
         return data_dict
 
     def random_world_scaling(self, data_dict=None, config=None):
         if data_dict is None:
             return partial(self.random_world_scaling, config=config)
         gt_boxes, points = augmentor_utils.global_scaling(
-            data_dict['gt_boxes'], data_dict['points'], config['WORLD_SCALE_RANGE']
+            data_dict['gt_boxes'], data_dict['colored_points'], config['WORLD_SCALE_RANGE']
         )
         data_dict['gt_boxes'] = gt_boxes
-        data_dict['points'] = points
+        data_dict['colored_points'] = points
         return data_dict
 
     def forward(self, data_dict):
@@ -79,7 +78,7 @@ class DataAugmentor(object):
                 gt_names: (M), str
                 gt_boxes: (M, 7), [x, y, z, l, w, h, heading] in lidar coordinate system
                 road_plane: (4), [a, b, c, d]
-                points: (N, 7), Points of (x, y, z, intensity, r, g, b)
+                colored_points: (N, 7), Points of (x, y, z, intensity, r, g, b)
                 ...
 
         Returns:
@@ -88,7 +87,7 @@ class DataAugmentor(object):
                 gt_names: (M'), str
                 gt_boxes: (M', 7), [x, y, z, l, w, h, heading] in lidar coordinate system
                 road_plane: (4), [a, b, c, d]
-                points: (N', 7), Points of (x, y, z, intensity, r, g, b)
+                colored_points: (N', 7), Points of (x, y, z, intensity, r, g, b)
                 ...
 
         """

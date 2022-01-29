@@ -64,14 +64,14 @@ class KittiDataset(torch_data.Dataset):
         Args:
             idx: str, Sample index
         Returns:
-            image: (H, W, 3), RGB Image
+            img: (H, W, 3), RGB Image
         """
         img_file = self.root_split_path / 'image_2' / ('%s.png' % idx)
         assert img_file.exists(), 'File not found: %s' % img_file
-        image = io.imread(img_file)
-        image = image.astype(np.float32)
-        image /= 255.0
-        return image
+        img = io.imread(img_file)
+        img = img.astype(np.float32)
+        img /= 255.0
+        return img
 
     def get_image_shape(self, idx):
         """
@@ -144,7 +144,7 @@ class KittiDataset(torch_data.Dataset):
         Args:
             idx: str, Sample index
         Returns:
-            points_colored: (N, 7), Points of (x, y, z, intensity, r, g, b)
+            colored_points: (N, 7), Points of (x, y, z, intensity, r, g, b)
         """
         points = self.get_points(idx)
         img = self.get_image(idx)
@@ -296,10 +296,7 @@ class KittiDataset(torch_data.Dataset):
                 frame_id: (batch_size), str, Sample index
                 calib: (batch_size), calibration_kitti.Calibration
                 gt_boxes: (batch_size, M_max, 8), [x, y, z, l, w, h, heading, class_id] in lidar coordinate system
-                points: (N1 + N2 + ..., 8), Points of (batch_id, x, y, z, intensity, r, g, b)
-                voxels: (num_voxels1 + num_voxels2 + ..., max_points_per_voxel, 7), [x, y, z, intensity, r, g, b]
-                voxel_coords: (num_voxels1 + num_voxels2 + ..., 4), Location of voxels, [batch_id, zi, yi, xi]
-                voxel_num_points: (num_voxels1 + num_voxels2 + ...), Number of points in each voxel
+                colored_points: (N1 + N2 + ..., 8), Points of (batch_id, x, y, z, intensity, r, g, b)
                 image_shape: (batch_size, 2), h * w
                 batch_size: int
                 image: optional, (batch_size, H_max, W_max, 3), RGB Image
@@ -408,19 +405,21 @@ class KittiDataset(torch_data.Dataset):
 
     def include_processor(self):
         self.point_cloud_range = np.array(self.dataset_cfg.POINT_CLOUD_RANGE, dtype=np.float32)
+        
+        self.src_feature_list = self.dataset_cfg.SRC_FEATURE_LIST
+        self.src_point_features = len(self.src_feature_list)
+        
         self.used_feature_list = self.dataset_cfg.USED_FEATURE_LIST
-        self.num_point_features = len(self.used_feature_list)
+        self.used_point_features = len(self.used_feature_list)
         
         self.data_augmentor = DataAugmentor(
-            self.root_path, self.dataset_cfg.DATA_AUGMENTOR, self.class_names, self.num_point_features, logger=self.logger
+            self.root_path, self.dataset_cfg.DATA_AUGMENTOR, self.class_names, self.src_point_features, logger=self.logger
         ) if self.data_augmentation else None
         
         self.data_processor = DataProcessor(
-            self.dataset_cfg.DATA_PROCESSOR, self.point_cloud_range, self.training, self.num_point_features
+            self.dataset_cfg.DATA_PROCESSOR, self.point_cloud_range, self.training
         )
         
-        self.grid_size = self.data_processor.grid_size
-        self.voxel_size = self.data_processor.voxel_size
         self.total_epochs = 0
         self._merge_all_iters_to_one_epoch = False
 
@@ -443,10 +442,8 @@ class KittiDataset(torch_data.Dataset):
                 frame_id: str, Sample index
                 calib: calibration_kitti.Calibration
                 gt_boxes: (M', 8), [x, y, z, l, w, h, heading, class_id] in lidar coordinate system
-                points: (N', 7), Points of (x, y, z, intensity, r, g, b)
-                voxels: (num_voxels, max_points_per_voxel, 7), [x, y, z, intensity, r, g, b]
-                voxel_coords: (num_voxels, 3), Location of voxels, [zi, yi, xi]
-                voxel_num_points: (num_voxels), Number of points in each voxel
+                colored_points: (N', 7), Points of (x, y, z, intensity, r, g, b)
+                point_features: (N', 7), Points of (x, y, z, intensity, r, g, b)
                 image_shape: (2), h * w
                 image: optional, (H, W, 3), RGB Image
         """
@@ -464,7 +461,7 @@ class KittiDataset(torch_data.Dataset):
             'calib': calib,
         }
 
-        get_item_list = self.dataset_cfg.get('GET_ITEM_LIST', ['colored_points'])
+        get_item_list = self.dataset_cfg.get('GET_ITEM_LIST')
         if 'annos' in info:
             annos = info['annos']
             annos = common_utils.drop_info_with_name(annos, name='DontCare') # exclude class: DontCare
@@ -473,14 +470,11 @@ class KittiDataset(torch_data.Dataset):
                 'gt_boxes': annos['gt_boxes_lidar'],
                 'road_plane': self.get_road_plane(sample_idx)
             })
+        
+        if 'colored_points' in get_item_list:
+            input_dict['colored_points'] = self.get_colored_points_in_fov(sample_idx)
 
-        if "colored_points" in get_item_list:
-            colored_points = self.get_colored_points_in_fov(sample_idx)
-            #~ points_new = (colored_points[:-1] + colored_points[1:]) / 2
-            #~ colored_points = np.concatenate([colored_points, points_new], axis=0)
-            input_dict['points'] = colored_points
-
-        if "image" in get_item_list:
+        if 'image' in get_item_list:
             input_dict['image'] = self.get_image(sample_idx)
 
         data_dict = self.prepare_data(data_dict=input_dict)
@@ -498,7 +492,7 @@ class KittiDataset(torch_data.Dataset):
                 gt_names: (M), str
                 gt_boxes: (M, 7), [x, y, z, l, w, h, heading] in lidar coordinate system
                 road_plane: (4), [a, b, c, d]
-                points: (N, 7), Points of (x, y, z, intensity, r, g, b)
+                colored_points: (N, 7), Points of (x, y, z, intensity, r, g, b)
                 image: optional, (H, W, 3), RGB Image
 
         Returns:
@@ -506,10 +500,8 @@ class KittiDataset(torch_data.Dataset):
                 frame_id: str, Sample index
                 calib: calibration_kitti.Calibration
                 gt_boxes: (M', 8), [x, y, z, l, w, h, heading, class_id] in lidar coordinate system
-                points: (N', 7), Points of (x, y, z, intensity, r, g, b)
-                voxels: (num_voxels, max_points_per_voxel, 7), [x, y, z, intensity, r, g, b]
-                voxel_coords: (num_voxels, 3), Location of voxels, [zi, yi, xi]
-                voxel_num_points: (num_voxels), Number of points in each voxel
+                colored_points: (N', 7), Points of (x, y, z, intensity, r, g, b)
+                point_features: (N', 7), Points of (x, y, z, intensity, r, g, b)
                 image: optional, (H, W, 3), RGB Image
         """
         
@@ -529,6 +521,14 @@ class KittiDataset(torch_data.Dataset):
             data_dict['gt_boxes'] = gt_boxes # (M', 8), [x, y, z, l, w, h, heading, class_id] in lidar coordinate system
 
         data_dict = self.data_processor.forward(data_dict=data_dict)
+        
+        # For ablation study
+        if self.used_feature_list == ['x', 'y', 'z', 'intensity', 'r', 'g', 'b']:
+            data_dict['point_features'] = data_dict['colored_points'].copy()
+        elif self.used_feature_list == ['x', 'y', 'z', 'intensity']:
+            data_dict['point_features'] = data_dict['colored_points'].copy()[:, :4]
+        else:
+            raise NotImplementedError
 
         if self.training and len(data_dict['gt_boxes']) == 0:
             new_index = np.random.randint(self.__len__())
@@ -549,10 +549,8 @@ class KittiDataset(torch_data.Dataset):
                 frame_id: (batch_size), str, Sample index
                 calib: (batch_size), calibration_kitti.Calibration
                 gt_boxes: (batch_size, M_max, 8), [x, y, z, l, w, h, heading, class_id] in lidar coordinate system
-                points: (N1 + N2 + ..., 8), Points of (batch_id, x, y, z, intensity, r, g, b)
-                voxels: (num_voxels1 + num_voxels2 + ..., max_points_per_voxel, 7), [x, y, z, intensity, r, g, b]
-                voxel_coords: (num_voxels1 + num_voxels2 + ..., 4), Location of voxels, [batch_id, zi, yi, xi]
-                voxel_num_points: (num_voxels1 + num_voxels2 + ...), Number of points in each voxel
+                colored_points: (N1 + N2 + ..., 8), Points of (batch_id, x, y, z, intensity, r, g, b)
+                point_features: (N1 + N2 + ..., 7), Points of (x, y, z, intensity, r, g, b)
                 image_shape: (batch_size, 2), h * w
                 batch_size: int
                 image: optional, (batch_size, H_max, W_max, 3), RGB Image
@@ -566,9 +564,9 @@ class KittiDataset(torch_data.Dataset):
 
         for key, val in data_dict.items():
             try:
-                if key in ['voxels', 'voxel_num_points']:
+                if key in ['point_features']:
                     ret[key] = np.concatenate(val, axis=0)
-                elif key in ['points', 'voxel_coords']:
+                elif key in ['colored_points']:
                     coors = []
                     for i, coor in enumerate(val):
                         coor_pad = np.pad(coor, ((0, 0), (1, 0)), mode='constant', constant_values=i)

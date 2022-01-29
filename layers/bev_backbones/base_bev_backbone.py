@@ -1,13 +1,15 @@
-import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+import numpy as np
 
 
 class BaseBEVBackbone(nn.Module):
-    def __init__(self, model_cfg, input_channels):
+    def __init__(self, model_cfg, input_channels, **kwargs):
         super().__init__()
         self.model_cfg = model_cfg
-
+        self.input_channels = input_channels
+        
         if self.model_cfg.get('LAYER_NUMS', None) is not None:
             assert len(self.model_cfg.LAYER_NUMS) == len(self.model_cfg.LAYER_STRIDES) == len(self.model_cfg.NUM_FILTERS)
             layer_nums = self.model_cfg.LAYER_NUMS
@@ -24,7 +26,7 @@ class BaseBEVBackbone(nn.Module):
             upsample_strides = num_upsample_filters = []
         
         num_levels = len(layer_nums)
-        c_in_list = [input_channels, *num_filters[:-1]]
+        c_in_list = [self.input_channels, *num_filters[:-1]]
         self.blocks = nn.ModuleList()
         self.deblocks = nn.ModuleList()
         for idx in range(num_levels):
@@ -77,54 +79,27 @@ class BaseBEVBackbone(nn.Module):
             ))
 
         self.num_bev_features = c_in
-
-    def forward(self, data_dict):
-        """
-        Args:
-            data_dict:
-                spatial_features
-        Returns:
-        """
-        spatial_features = data_dict['spatial_features']
+    
+    def forward(self, batch_dict, **kwargs):
+        batch_pv_features = batch_dict['pv_features']
         
-        ups = []
-        x = spatial_features
+        batch_bev_features = []
+        x = batch_pv_features
         for i in range(len(self.blocks)):
             x = self.blocks[i](x)
             if len(self.deblocks) > 0:
-                ups.append(self.deblocks[i](x))
+                batch_bev_features.append(self.deblocks[i](x))
             else:
-                ups.append(x)
+                batch_bev_features.append(x)
 
-        if len(ups) > 1:
-            x = torch.cat(ups, dim=1)
-        elif len(ups) == 1:
-            x = ups[0]
+        if len(batch_bev_features) > 1:
+            batch_bev_features = torch.cat(batch_bev_features, dim=1)
+        elif len(batch_bev_features) == 1:
+            batch_bev_features = batch_bev_features[0]
 
         if len(self.deblocks) > len(self.blocks):
-            x = self.deblocks[-1](x)
-
-        import matplotlib.pyplot as plt
-        import numpy as np
-        import time
+            batch_bev_features = self.deblocks[-1](batch_bev_features)
         
-        #~ batch_size = x.shape[0]
-        #~ for batch_idx in range(batch_size):
-            #~ feature_map = x[batch_idx]
-            #~ fig = plt.figure(figsize=(16, 16))
-            #~ fig.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.95, wspace=0.05, hspace=0.05)
-            #~ for i in range(0, 32):
-                #~ img = feature_map[i + 256:i + 1 + 256].permute(1, 2, 0).cpu().numpy()
-                #~ img = img[::-1, :, :] # y -> -y
-                #~ pmin = np.min(img)
-                #~ pmax = np.max(img)
-                #~ img = (((img - pmin) / (pmax - pmin + 0.000001)) * 255).astype(np.int)
-                #~ plt.subplot(4, 8, i + 1)
-                #~ plt.imshow(img)
-                #~ plt.axis('off')
-            #~ plt.show()
-            #~ fig.savefig(time.asctime(time.localtime(time.time())), dpi=200)
+        batch_dict['bev_features'] = batch_bev_features
         
-        data_dict['spatial_features_2d'] = x
-
-        return data_dict
+        return batch_dict
