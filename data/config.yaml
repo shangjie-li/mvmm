@@ -20,14 +20,7 @@ DATA_CONFIG:
     USED_FEATURE_LIST: ['x', 'y', 'z', 'intensity']
     
     DATA_AUGMENTOR:
-        - NAME: random_world_flip
-          ALONG_AXIS_LIST: ['x']
-
-        - NAME: random_world_rotation
-          WORLD_ROT_ANGLE: [-0.78539816, 0.78539816]
-
-        - NAME: random_world_scaling
-          WORLD_SCALE_RANGE: [0.95, 1.05]
+    
     DATA_PROCESSOR:
         - NAME: mask_points_and_boxes_outside_range
           REMOVE_OUTSIDE_BOXES: True
@@ -44,6 +37,10 @@ MODEL:
 
     RV_BACKBONE:
         NAME: BaseRVBackbone
+        FULL_SIZE: [64, 2048]
+        LIDAR_FOV_UP: 2
+        LIDAR_FOV_DOWN: 24.8
+        FRONT_RANGE: [0, 768, 48, 1280]
         NUM_FILTERS: [4]
 
     PV_BRIDGE:
@@ -55,8 +52,8 @@ MODEL:
         }
         MAX_POINTS_PER_PILLAR: 32
         USE_ABSOLUTE_XYZ: False
-        USE_RELATIVE_XYZ_TO_CLUSTER: True
-        USE_RELATIVE_XYZ_TO_CENTER: True
+        USE_RELATIVE_XYZ_TO_CLUSTER: False
+        USE_RELATIVE_XYZ_TO_CENTER: False
         NUM_FILTERS: [64]
 
     BEV_BACKBONE:

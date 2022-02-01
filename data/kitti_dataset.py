@@ -443,7 +443,7 @@ class KittiDataset(torch_data.Dataset):
                 calib: calibration_kitti.Calibration
                 gt_boxes: (M', 8), [x, y, z, l, w, h, heading, class_id] in lidar coordinate system
                 colored_points: (N', 7), Points of (x, y, z, intensity, r, g, b)
-                point_features: (N', 7), Points of (x, y, z, intensity, r, g, b)
+                point_features: (N', used_point_features)
                 image_shape: (2), h * w
                 image: optional, (H, W, 3), RGB Image
         """
@@ -501,7 +501,7 @@ class KittiDataset(torch_data.Dataset):
                 calib: calibration_kitti.Calibration
                 gt_boxes: (M', 8), [x, y, z, l, w, h, heading, class_id] in lidar coordinate system
                 colored_points: (N', 7), Points of (x, y, z, intensity, r, g, b)
-                point_features: (N', 7), Points of (x, y, z, intensity, r, g, b)
+                point_features: (N', used_point_features)
                 image: optional, (H, W, 3), RGB Image
         """
         
@@ -527,6 +527,14 @@ class KittiDataset(torch_data.Dataset):
             data_dict['point_features'] = data_dict['colored_points'].copy()
         elif self.used_feature_list == ['x', 'y', 'z', 'intensity']:
             data_dict['point_features'] = data_dict['colored_points'].copy()[:, :4]
+        elif self.used_feature_list == ['r', 'g', 'b']:
+            data_dict['point_features'] = data_dict['colored_points'].copy()[:, 4:]
+        elif self.used_feature_list == ['x', 'y', 'z', 'range', 'intensity']:
+            xs = data_dict['colored_points'][:, 0:1]
+            ys = data_dict['colored_points'][:, 1:2]
+            zs = data_dict['colored_points'][:, 2:3]
+            rs = np.sqrt(xs ** 2 + ys ** 2 + zs ** 2)
+            data_dict['point_features'] = np.concatenate([xs, ys, zs, rs, data_dict['colored_points'][:, 3:4]], axis=1)
         else:
             raise NotImplementedError
 
@@ -550,7 +558,7 @@ class KittiDataset(torch_data.Dataset):
                 calib: (batch_size), calibration_kitti.Calibration
                 gt_boxes: (batch_size, M_max, 8), [x, y, z, l, w, h, heading, class_id] in lidar coordinate system
                 colored_points: (N1 + N2 + ..., 8), Points of (batch_id, x, y, z, intensity, r, g, b)
-                point_features: (N1 + N2 + ..., 7), Points of (x, y, z, intensity, r, g, b)
+                point_features: (N1 + N2 + ..., used_point_features)
                 image_shape: (batch_size, 2), h * w
                 batch_size: int
                 image: optional, (batch_size, H_max, W_max, 3), RGB Image

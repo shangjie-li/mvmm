@@ -130,7 +130,7 @@ class PillarFeatureExtractor(nn.Module):
             
             max_num = torch.arange(self.model_cfg.MAX_POINTS_PER_PILLAR, dtype=torch.int, device=num_points_per_pillar.device).view(1, -1)
             mask = num_points_per_pillar.unsqueeze(1).int() > max_num # (num_pillars, max_points_per_pillar)
-            mask = torch.unsqueeze(mask, -1).type_as(pillars)
+            mask = torch.unsqueeze(mask, -1).type_as(pillars) # (num_pillars, max_points_per_pillar, 1)
             pillars *= mask
             batch_pillars.append(pillars)
             
@@ -151,7 +151,11 @@ class PillarFeatureExtractor(nn.Module):
             this_coords = batch_coords[batch_mask, :]
             this_pillars = batch_pillars[batch_mask, :]
             
-            pv_features = torch.zeros((self.num_pv_features, self.nz * self.ny * self.nx), dtype=this_pillars.dtype, device=this_pillars.device)
+            pv_features = torch.zeros(
+                (self.num_pv_features, self.nz * self.ny * self.nx),
+                dtype=this_pillars.dtype,
+                device=this_pillars.device
+            )
             
             indices = (this_coords[:, 1] + this_coords[:, 2] * self.nx + this_coords[:, 3]).type(torch.long)
             pv_features[:, indices] = this_pillars.t()

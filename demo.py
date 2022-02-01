@@ -129,7 +129,7 @@ def main():
                     ref_labels=pred_dicts[0]['pred_labels'],
                     point_colors=data_dict['colored_points'][:, -3:].cpu().numpy()
                 )
-            elif demo_dataset.used_feature_list == ['x', 'y', 'z', 'intensity']:
+            else:
                 V.draw_scenes(
                     points=data_dict['colored_points'][:, 1:].cpu().numpy(),
                     ref_boxes=pred_dicts[0]['pred_boxes'],
@@ -137,8 +137,6 @@ def main():
                     ref_labels=pred_dicts[0]['pred_labels'],
                     point_colors=np.ones((data_dict['colored_points'].shape[0], 3))
                 )
-            else:
-                raise NotImplementedError
                 
             print('Time cost per batch: %s' % (round((time_end - time_start) / 10, 3)))
 

@@ -67,7 +67,7 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
                         ref_labels=pred_dicts[0]['pred_labels'],
                         point_colors=batch_dict['colored_points'][:, -3:].cpu().numpy()
                     )
-                elif dataset.used_feature_list == ['x', 'y', 'z', 'intensity']:
+                else:
                     V.draw_scenes(
                         points=batch_dict['colored_points'][:, 1:].cpu().numpy(),
                         ref_boxes=pred_dicts[0]['pred_boxes'],
@@ -75,8 +75,6 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
                         ref_labels=pred_dicts[0]['pred_labels'],
                         point_colors=np.ones((batch_dict['colored_points'].shape[0], 3))
                     )
-                else:
-                    raise NotImplementedError
     
         disp_dict = {}
 

@@ -2,6 +2,8 @@ import argparse
 import glob
 from pathlib import Path
 import time
+import copy
+import matplotlib.pyplot as plt
 
 import open3d
 from utils import open3d_vis_utils as V
@@ -64,7 +66,7 @@ if __name__ == '__main__':
                 ref_labels=data_dict['gt_boxes'].reshape(-1, 8)[:, 7].astype(np.int),
                 point_colors=data_dict['colored_points'].reshape(-1, 7)[:, -3:]
             )
-        elif dataset.used_feature_list == ['x', 'y', 'z', 'intensity']:
+        else:
             V.draw_scenes(
                 points=data_dict['colored_points'].reshape(-1, 7),
                 ref_boxes=data_dict['gt_boxes'].reshape(-1, 8)[:, :7],
@@ -72,6 +74,4 @@ if __name__ == '__main__':
                 ref_labels=data_dict['gt_boxes'].reshape(-1, 8)[:, 7].astype(np.int),
                 point_colors=np.ones((data_dict['colored_points'].reshape(-1, 7).shape[0], 3))
             )
-        else:
-            raise NotImplementedError
-
+        
