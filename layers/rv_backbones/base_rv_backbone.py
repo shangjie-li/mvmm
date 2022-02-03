@@ -60,10 +60,9 @@ class BaseRVBackbone(nn.Module):
         # ~ )
         # ~ self.dr_blocks = nn.ModuleList(dr_blocks)
         
-        self.dr_blocks = DilatedResidualBlock(self.input_channels, self.input_channels)
-        
         # ~ self.num_rv_features = upsample_filters[-1]
-        self.num_rv_features = 4
+        self.num_rv_features = 64
+        self.dr_blocks = DilatedResidualBlock(self.input_channels, self.num_rv_features)
     
     def forward(self, batch_dict, **kwargs):
         batch_points = batch_dict['colored_points'] # (N1 + N2 + ..., 8), Points of (batch_id, x, y, z, intensity, r, g, b)
