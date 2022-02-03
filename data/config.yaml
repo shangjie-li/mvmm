@@ -37,11 +37,14 @@ MODEL:
 
     RV_BACKBONE:
         NAME: BaseRVBackbone
-        FULL_SIZE: [64, 2048]
+        FULL_SIZE_OF_RANGE_IMAGE: [64, 2048]
+        FRONT_RANGE_OF_RANGE_IMAGE: [0, 768, 48, 1280]
         LIDAR_FOV_UP: 2
         LIDAR_FOV_DOWN: 24.8
-        FRONT_RANGE: [0, 768, 48, 1280]
-        NUM_FILTERS: [4]
+        DOWNSAMPLE_STRIDES: [1, 1, 2, 2, 2, 2]
+        DOWNSAMPLE_FILTERS: [32, 64, 128, 128, 256, 256]
+        UPSAMPLE_STRIDES: [2, 2, 2, 2]
+        UPSAMPLE_FILTERS: [128, 128, 64, 64]
 
     PV_BRIDGE:
         NAME: PillarFeatureExtractor
@@ -54,15 +57,15 @@ MODEL:
         USE_ABSOLUTE_XYZ: False
         USE_RELATIVE_XYZ_TO_CLUSTER: False
         USE_RELATIVE_XYZ_TO_CENTER: False
-        NUM_FILTERS: [64]
+        FILTERS: [64]
 
     BEV_BACKBONE:
         NAME: BaseBEVBackbone
-        LAYER_NUMS: [3, 5, 5]
-        LAYER_STRIDES: [2, 2, 2]
-        NUM_FILTERS: [64, 128, 256]
+        NUM_lAYERS: [3, 5, 5]
+        DOWNSAMPLE_STRIDES: [2, 2, 2]
+        DOWNSAMPLE_FILTERS: [64, 128, 256]
         UPSAMPLE_STRIDES: [1, 2, 4]
-        NUM_UPSAMPLE_FILTERS: [128, 128, 128]
+        UPSAMPLE_FILTERS: [128, 128, 128]
 
     DENSE_HEAD:
         NAME: AnchorHeadSingle

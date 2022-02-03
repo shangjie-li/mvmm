@@ -4,6 +4,27 @@ import torch.nn.functional as F
 import numpy as np
 
 
+class DilatedResidualBlock(nn.Module):
+    def __init__(self, inp_channels, out_channels):
+        super().__init__()
+        
+        self.conv_d1 = nn.Conv2d(inp_channels, out_channels, kernel_size=3, stride=1, padding=1, dilation=1, bias=False)
+        self.conv_d2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=2, dilation=2, bias=False)
+        self.conv_d3 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=3, dilation=3, bias=False)
+        
+        self.conv_1x1 = nn.Conv2d(out_channels * 3, out_channels, kernel_size=1, stride=1, padding=0, bias=False)
+    
+    def forward(self, inputs):
+        x1 = self.conv_d1(inputs)
+        x2 = self.conv_d2(x1)
+        x3 = self.conv_d3(x2)
+        
+        x = torch.cat([x1, x2, x3], dim=1)
+        x = self.conv_1x1(x)
+        x += inputs
+        return x
+        
+
 class BaseRVBackbone(nn.Module):
     def __init__(self, model_cfg, input_channels, **kwargs):
         super().__init__()
@@ -11,15 +32,38 @@ class BaseRVBackbone(nn.Module):
         self.input_channels = input_channels
         
         self.pi = 3.14159
-        self.full_size = self.model_cfg.FULL_SIZE
+        self.full_size = self.model_cfg.FULL_SIZE_OF_RANGE_IMAGE
+        self.front_range = self.model_cfg.FRONT_RANGE_OF_RANGE_IMAGE
         self.lidar_fov_up = self.model_cfg.LIDAR_FOV_UP * self.pi / 180
         self.lidar_fov_down = self.model_cfg.LIDAR_FOV_DOWN * self.pi / 180
-        self.front_range = self.model_cfg.FRONT_RANGE
         
-        self.num_filters = self.model_cfg.NUM_FILTERS
-        assert len(self.num_filters) > 0
+        if self.model_cfg.get('DOWNSAMPLE_STRIDES', None) is not None:
+            assert len(self.model_cfg.DOWNSAMPLE_STRIDES) == len(self.model_cfg.DOWNSAMPLE_FILTERS)
+            downsample_strides = self.model_cfg.DOWNSAMPLE_STRIDES
+            downsample_filters = self.model_cfg.DOWNSAMPLE_FILTERS
+        else:
+            raise NotImplementedError
         
-        self.num_rv_features = self.num_filters[-1]
+        if self.model_cfg.get('UPSAMPLE_STRIDES', None) is not None:
+            assert len(self.model_cfg.UPSAMPLE_STRIDES) == len(self.model_cfg.UPSAMPLE_FILTERS)
+            upsample_strides = self.model_cfg.UPSAMPLE_STRIDES
+            upsample_filters = self.model_cfg.UPSAMPLE_FILTERS
+        else:
+            raise NotImplementedError
+        
+        # ~ self.downsample_blocks = ...
+        # ~ self.upsample_blocks = ...
+        
+        # ~ dr_blocks = []
+        # ~ dr_blocks.append(
+            # ~ DilatedResidualBlock(self.input_channels, self.input_channels)
+        # ~ )
+        # ~ self.dr_blocks = nn.ModuleList(dr_blocks)
+        
+        self.dr_blocks = DilatedResidualBlock(self.input_channels, self.input_channels)
+        
+        # ~ self.num_rv_features = upsample_filters[-1]
+        self.num_rv_features = 4
     
     def forward(self, batch_dict, **kwargs):
         batch_points = batch_dict['colored_points'] # (N1 + N2 + ..., 8), Points of (batch_id, x, y, z, intensity, r, g, b)
@@ -66,6 +110,10 @@ class BaseRVBackbone(nn.Module):
         batch_range_images = torch.stack(batch_range_images, dim=0)
         
         # do something with batch_range_images...
+        # ~ for dr in self.dr_blocks:
+            # ~ batch_range_images = dr(batch_range_images)
+        
+        batch_range_images = self.dr_blocks(batch_range_images)
         
         batch_rv_features = []
         batch_size = batch_points[:, 0].max().int().item() + 1

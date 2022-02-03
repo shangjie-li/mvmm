@@ -1,14 +1,15 @@
 ## Ablation Experiments
 
-| ID | Model        | Used features                           | Data augmentation                  | Car 3D AP (R11)           | Pedestrian 3D AP (R11)    | Cyclist 3D AP (R11)       | Latency |
-|:--:|:------------:|----------------------------------------:|-----------------------------------:|:-------------------------:|:-------------------------:|:-------------------------:|:-------:|
-| 01 | pointpillars | xyz, i, xyz_to_cluster, xyz_to_center   | sampling, flip, rotation, scaling  | 85.9041, 76.5959, 74.6299 | 53.5642, 48.0202, 44.3261 | 81.2495, 65.5292, 61.4776 | 19ms    |
-| 02 | pointpillars | xyz, i, xyz_to_cluster, xyz_to_center   | flip, rotation, scaling            | 85.0795, 73.6429, 68.1080 | 46.3585, 42.6274, 39.6279 | 57.0723, 38.5380, 37.0831 | 19ms    |
-| 03 | pointpillars | xyz, i                                  | flip, rotation, scaling            | 83.5454, 72.4637, 67.5675 | 45.6709, 42.1264, 41.1873 | 56.1153, 41.0372, 37.6368 | 19ms    |
-| 04 | pointpillars | xyz, i, xyz_to_cluster                  | flip, rotation, scaling            | 82.9791, 72.2482, 67.1901 | 44.9506, 41.7879, 38.6402 | 54.6337, 38.0115, 36.5259 | 19ms    |
-| 05 | pointpillars | xyz, i, xyz_to_center                   | flip, rotation, scaling            | 84.5645, 72.6793, 67.8071 | 46.1848, 44.0710, 42.1585 | 57.0083, 38.3209, 36.6195 | 19ms    |
-| 06 | pointpillars | xyz, i                                  | -                                  | 64.6726, 53.4601, 53.5857 | 32.4545, 30.3049, 25.6269 | 49.4620, 34.2456, 33.8225 | 19ms    |
-| 07 | pointpillars | xyz, i                                  | flip                               | 74.4864, 64.5149, 62.7211 | 42.7343, 36.7054, 33.1361 | 56.4004, 36.8465, 35.0350 | 19ms    |
-| 08 | pointpillars | xyz, i                                  | rotation                           | 76.7034, 66.8348, 65.1285 | 44.2698, 39.0987, 37.8425 | 60.5570, 41.2111, 39.3014 | 19ms    |
-| 09 | pointpillars | xyz, i                                  | scaling                            | 74.2255, 63.5115, 57.2467 | 35.9211, 31.0324, 29.9227 | 54.5309, 33.8602, 31.4590 | 19ms    |
- * The latency is tested on a single 1080Ti GPU.
+| ID | Model | Used features          | Data augmentation                 | Car              | Pedestrian       | Cyclist          | Latency |
+|:--:|:-----:|:----------------------:|:---------------------------------:|:----------------:|:----------------:|:----------------:|:-------:|
+| 01 | PP    | xyz, i, xyz_cl, xyz_ce | sampling, flip, rotation, scaling | 85.9, 76.5, 74.6 | 53.5, 48.0, 44.3 | 81.2, 65.5, 61.4 | 19ms    |
+| 02 | PP    | xyz, i, xyz_cl, xyz_ce | flip, rotation, scaling           | 85.0, 73.6, 68.1 | 46.3, 42.6, 39.6 | 57.0, 38.5, 37.0 | 19ms    |
+| 03 | PP    | xyz, i                 | flip, rotation, scaling           | 83.5, 72.4, 67.5 | 45.6, 42.1, 41.1 | 56.1, 41.0, 37.6 | 19ms    |
+| 04 | PP    | xyz, i, xyz_cl         | flip, rotation, scaling           | 82.9, 72.2, 67.1 | 44.9, 41.7, 38.6 | 54.6, 38.0, 36.5 | 19ms    |
+| 05 | PP    | xyz, i, xyz_ce         | flip, rotation, scaling           | 84.5, 72.6, 67.8 | 46.1, 44.0, 42.1 | 57.0, 38.3, 36.6 | 19ms    |
+| 06 | PP    | xyz, i                 | -                                 | 64.6, 53.4, 53.5 | 32.4, 30.3, 25.6 | 49.4, 34.2, 33.8 | 19ms    |
+| 07 | PP    | xyz, i                 | flip                              | 74.4, 64.5, 62.7 | 42.7, 36.7, 33.1 | 56.4, 36.8, 35.0 | 19ms    |
+| 08 | PP    | xyz, i                 | rotation                          | 76.7, 66.8, 65.1 | 44.2, 39.0, 37.8 | 60.5, 41.2, 39.3 | 19ms    |
+| 09 | PP    | xyz, i                 | scaling                           | 74.2, 63.5, 57.2 | 35.9, 31.0, 29.9 | 54.5, 33.8, 31.4 | 19ms    |
+| 10 | MVMM  | xyz, i                 | -                                 | 67.6, 54.6, 54.4 | 31.2, 25.5, 24.5 | 50.4, 34.0, 33.2 |         |
+ * The 3D AP with 11 Recall Positions (R11) is used to evaluate the models. The latency is tested on a single 1080Ti GPU.

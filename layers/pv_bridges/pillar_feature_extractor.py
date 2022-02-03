@@ -7,7 +7,7 @@ from spconv.pytorch.utils import PointToVoxel
 
 
 class PFNLayer(nn.Module):
-    def __init__(self, in_channels, out_channels, use_norm=True, last_layer=False):
+    def __init__(self, inp_channels, out_channels, use_norm=True, last_layer=False):
         super().__init__()
         
         self.last_layer = last_layer
@@ -16,10 +16,10 @@ class PFNLayer(nn.Module):
             out_channels = out_channels // 2
 
         if self.use_norm:
-            self.linear = nn.Linear(in_channels, out_channels, bias=False)
+            self.linear = nn.Linear(inp_channels, out_channels, bias=False)
             self.norm = nn.BatchNorm1d(out_channels, eps=1e-3, momentum=0.01)
         else:
-            self.linear = nn.Linear(in_channels, out_channels, bias=True)
+            self.linear = nn.Linear(inp_channels, out_channels, bias=True)
 
         self.part = 50000
 
@@ -70,20 +70,20 @@ class PillarFeatureExtractor(nn.Module):
         self.extra_channels += 3 if self.model_cfg.USE_RELATIVE_XYZ_TO_CLUSTER else 0
         self.extra_channels += 3 if self.model_cfg.USE_RELATIVE_XYZ_TO_CENTER else 0
         
-        self.num_filters = self.model_cfg.NUM_FILTERS
-        assert len(self.num_filters) > 0
+        assert len(self.model_cfg.FILTERS) > 0
+        filters = self.model_cfg.FILTERS
         
-        num_filters = [self.input_channels + self.extra_channels] + list(self.num_filters)
+        filters = [self.input_channels + self.extra_channels] + list(filters)
         pfn_layers = []
-        for i in range(len(num_filters) - 1):
-            in_filters = num_filters[i]
-            out_filters = num_filters[i + 1]
+        for i in range(len(filters) - 1):
+            in_filters = filters[i]
+            out_filters = filters[i + 1]
             pfn_layers.append(
-                PFNLayer(in_filters, out_filters, use_norm=True, last_layer=(i >= len(num_filters) - 2))
+                PFNLayer(in_filters, out_filters, use_norm=True, last_layer=(i >= len(filters) - 2))
             )
         self.pfn_layers = nn.ModuleList(pfn_layers)
         
-        self.num_pv_features = self.num_filters[-1]
+        self.num_pv_features = filters[-1]
     
     def forward(self, batch_dict, **kwargs):
         batch_points = batch_dict['colored_points'] # (N1 + N2 + ..., 8), Points of (batch_id, x, y, z, intensity, r, g, b)
