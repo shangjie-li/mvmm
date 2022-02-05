@@ -523,6 +523,11 @@ class KittiDataset(torch_data.Dataset):
         data_dict = self.data_processor.forward(data_dict=data_dict)
         
         # For ablation study
+        xs = data_dict['colored_points'][:, 0:1]
+        ys = data_dict['colored_points'][:, 1:2]
+        zs = data_dict['colored_points'][:, 2:3]
+        rs = np.sqrt(xs ** 2 + ys ** 2 + zs ** 2)
+        
         if self.used_feature_list == ['x', 'y', 'z', 'intensity', 'r', 'g', 'b']:
             data_dict['point_features'] = data_dict['colored_points'].copy()
         elif self.used_feature_list == ['x', 'y', 'z', 'intensity']:
@@ -530,11 +535,9 @@ class KittiDataset(torch_data.Dataset):
         elif self.used_feature_list == ['r', 'g', 'b']:
             data_dict['point_features'] = data_dict['colored_points'].copy()[:, 4:]
         elif self.used_feature_list == ['x', 'y', 'z', 'range', 'intensity']:
-            xs = data_dict['colored_points'][:, 0:1]
-            ys = data_dict['colored_points'][:, 1:2]
-            zs = data_dict['colored_points'][:, 2:3]
-            rs = np.sqrt(xs ** 2 + ys ** 2 + zs ** 2)
             data_dict['point_features'] = np.concatenate([xs, ys, zs, rs, data_dict['colored_points'][:, 3:4]], axis=1)
+        elif self.used_feature_list == ['x', 'y', 'z', 'range', 'intensity', 'r', 'g', 'b']:
+            data_dict['point_features'] = np.concatenate([xs, ys, zs, rs, data_dict['colored_points'][:, 3:7]], axis=1)
         else:
             raise NotImplementedError
 

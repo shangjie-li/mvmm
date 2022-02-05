@@ -26,8 +26,43 @@ class DilatedResidualBlock(nn.Module):
         x = torch.cat([x1, x2, x3], dim=1)
         x = self.conv_1x1_2(x)
         x += x0
-        return x
         
+        return x
+
+
+class DownsampleDilatedResidualBlock(nn.Module):
+    def __init__(self, inp_channels, out_channels, use_pool=True):
+        super().__init__()
+        
+        self.drb = DilatedResidualBlock(inp_channels, out_channels)
+        self.use_pool = use_pool
+        
+    def forward(self, inputs):
+        x = self.drb(inputs)
+        
+        if self.use_pool:
+            x = F.avg_pool2d(x, kernel_size=(2, 2), stride=(2, 2))
+        
+        return x
+
+
+class UpsampleDilatedResidualBlock(nn.Module):
+    def __init__(self, inp_channels, out_channels, use_interpolate=True):
+        super().__init__()
+        
+        self.drb = DilatedResidualBlock(inp_channels * 2, out_channels)
+        self.use_interpolate = use_interpolate
+    
+    def forward(self, inputs, skip_features):
+        if self.use_interpolate:
+            x = F.interpolate(inputs, scale_factor=2, mode='bilinear')
+        else:
+            x = inputs
+        
+        x = self.drb(torch.cat([x, skip_features], dim=1))
+        
+        return x
+
 
 class BaseRVBackbone(nn.Module):
     def __init__(self, model_cfg, input_channels, **kwargs):
@@ -42,31 +77,38 @@ class BaseRVBackbone(nn.Module):
         self.lidar_fov_down = self.model_cfg.LIDAR_FOV_DOWN * self.pi / 180
         
         if self.model_cfg.get('DOWNSAMPLE_STRIDES', None) is not None:
-            assert len(self.model_cfg.DOWNSAMPLE_STRIDES) == len(self.model_cfg.DOWNSAMPLE_FILTERS)
+            assert len(self.model_cfg.DOWNSAMPLE_STRIDES) == len(self.model_cfg.DOWNSAMPLE_FILTERS) == len(self.model_cfg.USE_POOL)
             downsample_strides = self.model_cfg.DOWNSAMPLE_STRIDES
             downsample_filters = self.model_cfg.DOWNSAMPLE_FILTERS
+            use_pool = self.model_cfg.USE_POOL
         else:
             raise NotImplementedError
         
         if self.model_cfg.get('UPSAMPLE_STRIDES', None) is not None:
-            assert len(self.model_cfg.UPSAMPLE_STRIDES) == len(self.model_cfg.UPSAMPLE_FILTERS)
+            assert len(self.model_cfg.UPSAMPLE_STRIDES) == len(self.model_cfg.UPSAMPLE_FILTERS) == len(self.model_cfg.USE_INTERPOLATE)
             upsample_strides = self.model_cfg.UPSAMPLE_STRIDES
             upsample_filters = self.model_cfg.UPSAMPLE_FILTERS
+            use_interpolate = self.model_cfg.USE_INTERPOLATE
         else:
             raise NotImplementedError
         
-        # ~ self.downsample_blocks = ...
-        # ~ self.upsample_blocks = ...
+        num_downsample_blocks = len(downsample_filters)
+        c_in_list = [self.input_channels, *downsample_filters[:-1]]
+        self.downsample_blocks = nn.ModuleList()
+        for idx in range(num_downsample_blocks):
+            self.downsample_blocks.append(
+                DownsampleDilatedResidualBlock(c_in_list[idx], downsample_filters[idx], use_pool[idx])
+            )
         
-        # ~ dr_blocks = []
-        # ~ dr_blocks.append(
-            # ~ DilatedResidualBlock(self.input_channels, self.input_channels)
-        # ~ )
-        # ~ self.dr_blocks = nn.ModuleList(dr_blocks)
-        
-        # ~ self.num_rv_features = upsample_filters[-1]
-        self.num_rv_features = 64
-        self.dr_blocks = DilatedResidualBlock(self.input_channels, self.num_rv_features)
+        num_upsample_blocks = len(upsample_filters)
+        c_in_list = [downsample_filters[-1], *upsample_filters[:-1]]
+        self.upsample_blocks = nn.ModuleList()
+        for idx in range(num_upsample_blocks):
+            self.upsample_blocks.append(
+                UpsampleDilatedResidualBlock(c_in_list[idx], upsample_filters[idx], use_interpolate[idx])
+            )
+
+        self.num_rv_features = upsample_filters[-1]
     
     def forward(self, batch_dict, **kwargs):
         batch_points = batch_dict['colored_points'] # (N1 + N2 + ..., 8), Points of (batch_id, x, y, z, intensity, r, g, b)
@@ -112,11 +154,15 @@ class BaseRVBackbone(nn.Module):
         batch_point_vs = torch.cat(batch_point_vs, dim=0)
         batch_range_images = torch.stack(batch_range_images, dim=0)
         
-        # do something with batch_range_images...
-        # ~ for dr in self.dr_blocks:
-            # ~ batch_range_images = dr(batch_range_images)
-        
-        batch_range_images = self.dr_blocks(batch_range_images)
+        x = batch_range_images
+        skip_features = []
+        for i in range(len(self.downsample_blocks)):
+            x = self.downsample_blocks[i](x)
+            skip_features.append(x)
+            
+        for i in range(len(self.upsample_blocks)):
+            x = self.upsample_blocks[i](x, skip_features[-i - 2])
+        batch_range_images = x
         
         batch_rv_features = []
         batch_size = batch_points[:, 0].max().int().item() + 1

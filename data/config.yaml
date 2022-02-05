@@ -17,7 +17,7 @@ DATA_CONFIG:
     
     GET_ITEM_LIST: ['colored_points']
     SRC_FEATURE_LIST: ['x', 'y', 'z', 'intensity', 'r', 'g', 'b']
-    USED_FEATURE_LIST: ['x', 'y', 'z', 'intensity']
+    USED_FEATURE_LIST: ['x', 'y', 'z', 'range', 'intensity', 'r', 'g', 'b']
     
     DATA_AUGMENTOR:
     
@@ -43,8 +43,10 @@ MODEL:
         LIDAR_FOV_DOWN: 24.8
         DOWNSAMPLE_STRIDES: [1, 1, 2, 2, 2, 2]
         DOWNSAMPLE_FILTERS: [32, 64, 128, 128, 256, 256]
+        USE_POOL: [False, False, True, True, True, True]
         UPSAMPLE_STRIDES: [2, 2, 2, 2]
         UPSAMPLE_FILTERS: [128, 128, 64, 64]
+        USE_INTERPOLATE: [True, True, True, True]
 
     PV_BRIDGE:
         NAME: PillarFeatureExtractor
@@ -54,7 +56,7 @@ MODEL:
             'test': 40000
         }
         MAX_POINTS_PER_PILLAR: 32
-        USE_ABSOLUTE_XYZ: False
+        USE_ABSOLUTE_XYZ: True
         USE_RELATIVE_XYZ_TO_CLUSTER: False
         USE_RELATIVE_XYZ_TO_CENTER: False
         FILTERS: [64]
