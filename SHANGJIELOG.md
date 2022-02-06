@@ -23,9 +23,9 @@
 | 11 | xyzi        | DRB(4, 64)     | xyz         | Linear(67, 64) | 69.4, 55.0, 53.8 | 30.8, 28.7, 24.6 | 44.5, 30.8, 27.3 | -       |
 | 12 | xyzi        | 6DDRB, 4UDRB   | -           | Linear(64, 64) | 63.1, 52.4, 51.1 | 32.2, 26.6, 24.6 | 40.5, 28.1, 27.2 | 33ms    |
 | 13 | xyzi        | 6DDRB, 4UDRB   | xyz         | Linear(67, 64) | 65.1, 54.1, 53.5 | 34.9, 29.7, 25.2 | 45.0, 30.5, 29.9 | 33ms    |
-| 14 | xyzri       | 6DDRB, 4UDRB   | xyz         | Linear(67, 64) |
-| 15 | xyzri, rgb  | 6DDRB, 4UDRB   | xyz         | Linear(67, 64) |
-| 16 | rgb         | 6DDRB, 4UDRB   | xyz         | Linear(67, 64) |
+| 14 | xyzri       | 6DDRB, 4UDRB   | xyz         | Linear(67, 64) | 69.5, 55.6, 55.0 | 35.9, 30.2, 26.1 | 45.8, 31.0, 27.9 | 33ms    |
+| 15 | xyzri, rgb  | 6DDRB, 4UDRB   | xyz         | Linear(67, 64) | 68.2, 54.6, 54.0 | 29.4, 23.8, 23.2 | 43.9, 29.0, 28.5 | 33ms    |
+| 16 | rgb         | 6DDRB, 4UDRB   | xyz         | Linear(67, 64) | 65.7, 53.5, 52.3 | 29.7, 24.9, 23.6 | 43.5, 26.8, 26.6 | 33ms    |
 
  * The 3D AP with 11 Recall Positions (R11) is used to evaluate the models. The latency is tested on a single 1080Ti GPU.
  

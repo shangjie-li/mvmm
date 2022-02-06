@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from layers import rv_backbones, pv_bridges, bev_backbones, dense_heads
+from layers import rv_backbones, voxel_backbones, bev_backbones, dense_heads
 from ops.iou3d_nms import iou3d_nms_utils
 from utils import model_nms_utils
 from utils.spconv_utils import find_all_spconv_keys
@@ -20,7 +20,7 @@ class MVMM(nn.Module):
         self.register_buffer('global_step', torch.LongTensor(1).zero_())
 
         self.module_topology = [
-            'rv_backbone', 'pv_bridge', 'bev_backbone', 'dense_head',
+            'rv_backbone', 'voxel_backbone', 'bev_backbone', 'dense_head',
         ]
         self.module_list = self.build_modules()
 
@@ -57,20 +57,20 @@ class MVMM(nn.Module):
         model_info_dict['num_rv_features'] = rv_backbone_module.num_rv_features
         return rv_backbone_module, model_info_dict
 
-    def build_pv_bridge(self, model_info_dict):
-        if self.model_cfg.get('PV_BRIDGE', None) is None:
+    def build_voxel_backbone(self, model_info_dict):
+        if self.model_cfg.get('VOXEL_BACKBONE', None) is None:
             return None, model_info_dict
 
-        pv_bridge_module = pv_bridges.__all__[self.model_cfg.PV_BRIDGE.NAME](
-            model_cfg=self.model_cfg.PV_BRIDGE,
+        voxel_backbone_module = voxel_backbones.__all__[self.model_cfg.VOXEL_BACKBONE.NAME](
+            model_cfg=self.model_cfg.VOXEL_BACKBONE,
             input_channels=model_info_dict['num_rv_features'],
             point_cloud_range=model_info_dict['point_cloud_range'],
             training=model_info_dict['training'],
         )
-        model_info_dict['module_list'].append(pv_bridge_module)
-        model_info_dict['num_pv_features'] = pv_bridge_module.num_pv_features
-        model_info_dict['grid_size'] = pv_bridge_module.grid_size
-        return pv_bridge_module, model_info_dict
+        model_info_dict['module_list'].append(voxel_backbone_module)
+        model_info_dict['num_voxel_features'] = voxel_backbone_module.num_voxel_features
+        model_info_dict['grid_size'] = voxel_backbone_module.grid_size
+        return voxel_backbone_module, model_info_dict
 
     def build_bev_backbone(self, model_info_dict):
         if self.model_cfg.get('BEV_BACKBONE', None) is None:
@@ -78,7 +78,7 @@ class MVMM(nn.Module):
 
         bev_backbone_module = bev_backbones.__all__[self.model_cfg.BEV_BACKBONE.NAME](
             model_cfg=self.model_cfg.BEV_BACKBONE,
-            input_channels=model_info_dict['num_pv_features'],
+            input_channels=model_info_dict['num_voxel_features'],
         )
         model_info_dict['module_list'].append(bev_backbone_module)
         model_info_dict['num_bev_features'] = bev_backbone_module.num_bev_features

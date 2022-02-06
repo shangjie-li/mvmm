@@ -10,9 +10,9 @@ class BaseBEVBackbone(nn.Module):
         self.model_cfg = model_cfg
         self.input_channels = input_channels
         
-        if self.model_cfg.get('NUM_lAYERS', None) is not None:
-            assert len(self.model_cfg.NUM_lAYERS) == len(self.model_cfg.DOWNSAMPLE_STRIDES) == len(self.model_cfg.DOWNSAMPLE_FILTERS)
-            num_layers = self.model_cfg.NUM_lAYERS
+        if self.model_cfg.get('NUM_LAYERS', None) is not None:
+            assert len(self.model_cfg.NUM_LAYERS) == len(self.model_cfg.DOWNSAMPLE_STRIDES) == len(self.model_cfg.DOWNSAMPLE_FILTERS)
+            num_layers = self.model_cfg.NUM_LAYERS
             downsample_strides = self.model_cfg.DOWNSAMPLE_STRIDES
             downsample_filters = self.model_cfg.DOWNSAMPLE_FILTERS
         else:
@@ -81,10 +81,10 @@ class BaseBEVBackbone(nn.Module):
         self.num_bev_features = c_in
     
     def forward(self, batch_dict, **kwargs):
-        batch_pv_features = batch_dict['pv_features']
+        batch_voxel_features = batch_dict['voxel_features']
         
         batch_bev_features = []
-        x = batch_pv_features
+        x = batch_voxel_features
         for i in range(len(self.blocks)):
             x = self.blocks[i](x)
             if len(self.deblocks) > 0:
