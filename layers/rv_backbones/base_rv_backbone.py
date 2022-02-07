@@ -168,6 +168,7 @@ class BaseRVBackbone(nn.Module):
         batch_range_images = x
         
         batch_range_images = self.conv_3x3(batch_range_images)
+        batch_range_images = F.softmax(batch_range_images, dim=1)
         
         batch_rv_features = []
         batch_size = batch_points[:, 0].max().int().item() + 1
