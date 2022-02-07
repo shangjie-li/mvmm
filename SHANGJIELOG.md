@@ -1,6 +1,6 @@
 ## Ablation Experiments for PointPillars
 
-| ID | PV features          | Data augmentation                 | Car              | Pedestrian       | Cyclist          | Latency |
+| ID | Used features        | Data augmentation                 | Car              | Pedestrian       | Cyclist          | Latency |
 |:--:|:--------------------:|:---------------------------------:|:----------------:|:----------------:|:----------------:|:-------:|
 | 01 | xyzi, xyz_cl, xyz_ce | sampling, flip, rotation, scaling | 85.9, 76.5, 74.6 | 53.5, 48.0, 44.3 | 81.2, 65.5, 61.4 | 19ms    |
 | 02 | xyzi, xyz_cl, xyz_ce | flip, rotation, scaling           | 85.0, 73.6, 68.1 | 46.3, 42.6, 39.6 | 57.0, 38.5, 37.0 | 19ms    |
@@ -13,8 +13,8 @@
 | 09 | xyzi                 | scaling                           | 74.2, 63.5, 57.2 | 35.9, 31.0, 29.9 | 54.5, 33.8, 31.4 | 19ms    |
 
  * The 3D AP with 11 Recall Positions (R11) is used to evaluate the models. The latency is tested on a single 1080Ti GPU.
- 
- 
+
+
 ## Ablation Experiments for MVMM
 
 | ID | RV features | RV backbone    | PV features | PV bridge      | Car              | Pedestrian       | Cyclist          | Latency |
@@ -28,4 +28,24 @@
 | 16 | rgb         | 6DDRB, 4UDRB   | xyz         | Linear(67, 64) | 65.7, 53.5, 52.3 | 29.7, 24.9, 23.6 | 43.5, 26.8, 26.6 | 33ms    |
 
  * The 3D AP with 11 Recall Positions (R11) is used to evaluate the models. The latency is tested on a single 1080Ti GPU.
+
+
+## Ablation Experiments for SECOND
+
+| ID | Used features        | Data augmentation                 | Car              | Pedestrian       | Cyclist          | Latency |
+|:--:|:--------------------:|:---------------------------------:|:----------------:|:----------------:|:----------------:|:-------:|
+| 17 | xyzi                 | sampling, flip, rotation, scaling | 88.2, 78.5, 77.4 | 55.3, 51.4, 47.5 | 80.9, 67.6, 63.1 | 29ms    |
+| 18 | occupancy            | sampling, flip, rotation, scaling | 87.7, 78.0, 76.7 | 51.6, 49.6, 45.2 | 80.3, 62.0, 58.8 | 29ms    |
+| 19 | xyzi                 | -                                 | 78.1, 64.7, 64.0 | 44.1, 38.5, 33.7 | 55.1, 37.7, 36.5 | 29ms    |
+| 20 | occupancy            | -                                 | 76.4, 64.3, 63.5 | 45.1, 35.3, 34.5 | 51.7, 36.2, 31.5 | 29ms    |
  
+ * The 3D AP with 11 Recall Positions (R11) is used to evaluate the models. The latency is tested on a single 1080Ti GPU.
+ 
+ 
+## Ablation Experiments for MVMM
+
+| ID | RV backbone                        | Voxel backbone         | Car              | Pedestrian       | Cyclist          | Latency |
+|:--:|:----------------------------------:|:----------------------:|:----------------:|:----------------:|:----------------:|:-------:|
+| 21 | xyzi -> 6DDRB, 4UDRB -> 64         | 1-2-3-4-out            |
+| 22 | xyzi -> 6DDRB, 4UDRB -> 3          | input-1-2-3-4-out      |
+| 23 | xyzi -> 6DDRB, 4UDRB -> 3(softmax) | input-1-2-3-4-out      |
