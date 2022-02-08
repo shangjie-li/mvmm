@@ -110,8 +110,8 @@ class BaseRVBackbone(nn.Module):
 
         # ~ self.num_rv_features = upsample_filters[-1]
         
-        self.conv_3x3 = nn.Conv2d(upsample_filters[-1], 3, kernel_size=3, stride=1, padding=1, bias=False)
-        self.num_rv_features = 3
+        self.conv_3x3 = nn.Conv2d(upsample_filters[-1], 4, kernel_size=3, stride=1, padding=1, bias=False)
+        self.num_rv_features = 4
     
     def forward(self, batch_dict, **kwargs):
         batch_points = batch_dict['colored_points'] # (N1 + N2 + ..., 8), Points of (batch_id, x, y, z, intensity, r, g, b)
@@ -168,7 +168,6 @@ class BaseRVBackbone(nn.Module):
         batch_range_images = x
         
         batch_range_images = self.conv_3x3(batch_range_images)
-        batch_range_images = F.softmax(batch_range_images, dim=1)
         
         batch_rv_features = []
         batch_size = batch_points[:, 0].max().int().item() + 1
