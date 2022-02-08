@@ -81,10 +81,10 @@ class BaseBEVBackbone(nn.Module):
         self.num_bev_features = c_in
     
     def forward(self, batch_dict, **kwargs):
-        batch_voxel_features = batch_dict['voxel_features']
+        batch_pv_features = batch_dict['pv_features']
         
         batch_bev_features = []
-        x = batch_voxel_features
+        x = batch_pv_features
         for i in range(len(self.blocks)):
             x = self.blocks[i](x)
             if len(self.deblocks) > 0:
