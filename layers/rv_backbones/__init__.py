@@ -1,5 +1,5 @@
-from .base_rv_backbone import BaseRVBackbone
+from .drnet import DRNet
 
 __all__ = {
-    'BaseRVBackbone': BaseRVBackbone,
+    'DRNet': DRNet,
 }

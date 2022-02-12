@@ -64,7 +64,7 @@ class UpsampleDilatedResidualBlock(nn.Module):
         return x
 
 
-class BaseRVBackbone(nn.Module):
+class DRNet(nn.Module):
     def __init__(self, model_cfg, input_channels, **kwargs):
         super().__init__()
         self.model_cfg = model_cfg

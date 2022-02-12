@@ -1,5 +1,7 @@
-from .pillar_feature_extractor import PillarFeatureExtractor
+from .pillar_feature_extractor import PFE
+from .voxel_feature_extractor import VFE
 
 __all__ = {
-    'PillarFeatureExtractor': PillarFeatureExtractor,
+    'PFE': PFE,
+    'VFE': VFE,
 }

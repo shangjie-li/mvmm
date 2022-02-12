@@ -526,18 +526,28 @@ class KittiDataset(torch_data.Dataset):
         xs = data_dict['colored_points'][:, 0:1]
         ys = data_dict['colored_points'][:, 1:2]
         zs = data_dict['colored_points'][:, 2:3]
-        rs = np.sqrt(xs ** 2 + ys ** 2 + zs ** 2)
+        ranges = np.sqrt(xs ** 2 + ys ** 2 + zs ** 2)
+        intensities = data_dict['colored_points'][:, 3:4]
+        colors = data_dict['colored_points'][:, 4:7]
+        
+        # For normalization
+        xs = (xs - 15.91) / 10.74
+        ys = (ys - 0.1) / 7.16
+        zs = (zs - (-1.04)) / 0.82
+        ranges = (ranges - 17.23) / 11.23
+        intensities = (intensities - 0.24) / 0.15
+        colors = (colors - np.array((0.35, 0.36, 0.35), dtype=np.float32)) / np.array((0.27, 0.26, 0.26), dtype=np.float32)
         
         if self.used_feature_list == ['x', 'y', 'z', 'intensity', 'r', 'g', 'b']:
-            data_dict['point_features'] = data_dict['colored_points'].copy()
+            data_dict['point_features'] = np.concatenate([xs, ys, zs, intensities, colors], axis=1)
         elif self.used_feature_list == ['x', 'y', 'z', 'intensity']:
-            data_dict['point_features'] = data_dict['colored_points'].copy()[:, :4]
+            data_dict['point_features'] = np.concatenate([xs, ys, zs, intensities], axis=1)
         elif self.used_feature_list == ['r', 'g', 'b']:
-            data_dict['point_features'] = data_dict['colored_points'].copy()[:, 4:]
+            data_dict['point_features'] = colors
         elif self.used_feature_list == ['x', 'y', 'z', 'range', 'intensity']:
-            data_dict['point_features'] = np.concatenate([xs, ys, zs, rs, data_dict['colored_points'][:, 3:4]], axis=1)
+            data_dict['point_features'] = np.concatenate([xs, ys, zs, ranges, intensities], axis=1)
         elif self.used_feature_list == ['x', 'y', 'z', 'range', 'intensity', 'r', 'g', 'b']:
-            data_dict['point_features'] = np.concatenate([xs, ys, zs, rs, data_dict['colored_points'][:, 3:7]], axis=1)
+            data_dict['point_features'] = np.concatenate([xs, ys, zs, ranges, intensities, colors], axis=1)
         else:
             raise NotImplementedError
 

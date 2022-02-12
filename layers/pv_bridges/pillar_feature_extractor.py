@@ -46,7 +46,7 @@ class PFNLayer(nn.Module):
             return x_concatenated
 
 
-class PillarFeatureExtractor(nn.Module):
+class PFE(nn.Module):
     def __init__(self, model_cfg, input_channels, point_cloud_range, training, **kwargs):
         super().__init__()
         self.model_cfg = model_cfg
