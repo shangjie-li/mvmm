@@ -52,6 +52,7 @@ class MVMM(nn.Module):
         rv_backbone_module = rv_backbones.__all__[self.model_cfg.RV_BACKBONE.NAME](
             model_cfg=self.model_cfg.RV_BACKBONE,
             input_channels=model_info_dict['num_point_features'],
+            num_class=self.num_class,
         )
         model_info_dict['module_list'].append(rv_backbone_module)
         model_info_dict['num_rv_features'] = rv_backbone_module.num_rv_features

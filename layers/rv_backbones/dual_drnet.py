@@ -64,7 +64,28 @@ class UpsampleDilatedResidualBlock(nn.Module):
         return x
 
 
-class DRNet(nn.Module):
+class AttentionalFusionModule(nn.Module):
+    def __init__(self, input_channels):
+        super().__init__()
+        
+        self.w_1 = nn.Sequential(
+            nn.Conv2d(input_channels, 1, kernel_size=1, stride=1, padding=0, bias=False),
+            nn.BatchNorm2d(1, eps=1e-3, momentum=0.01),
+        )
+        self.w_2 = nn.Sequential(
+            nn.Conv2d(input_channels, 1, kernel_size=1, stride=1, padding=0, bias=False),
+            nn.BatchNorm2d(1, eps=1e-3, momentum=0.01),
+        )
+        
+    def forward(self, x_1, x_2):
+        weight_1 = self.w_1(x_1)
+        weight_2 = self.w_2(x_2)
+        aw = torch.softmax(torch.cat([weight_1, weight_2], dim=1), dim=1)
+        y = x_1 * aw[:, 0:1, :, :] + x_2 * aw[:, 1:2, :, :]
+        return y.contiguous()
+
+
+class DualDRNet(nn.Module):
     def __init__(self, model_cfg, input_channels, num_class, **kwargs):
         super().__init__()
         self.model_cfg = model_cfg
@@ -93,24 +114,41 @@ class DRNet(nn.Module):
         else:
             raise NotImplementedError
         
+        self.channel_split = self.model_cfg.CHANNEL_SPLIT
+        assert self.channel_split[0] + self.channel_split[1] == self.input_channels
+        
         num_downsample_blocks = len(downsample_filters)
-        c_in_list = [self.input_channels, *downsample_filters[:-1]]
-        self.downsample_blocks = nn.ModuleList()
+        c_in_list_1 = [self.channel_split[0], *downsample_filters[:-1]]
+        self.downsample_blocks_1 = nn.ModuleList()
         for idx in range(num_downsample_blocks):
-            self.downsample_blocks.append(
-                DownsampleDilatedResidualBlock(c_in_list[idx], downsample_filters[idx], use_pool[idx])
+            self.downsample_blocks_1.append(
+                DownsampleDilatedResidualBlock(c_in_list_1[idx], downsample_filters[idx], use_pool[idx])
+            )
+        c_in_list_2 = [self.channel_split[1], *downsample_filters[:-1]]
+        self.downsample_blocks_2 = nn.ModuleList()
+        for idx in range(num_downsample_blocks):
+            self.downsample_blocks_2.append(
+                DownsampleDilatedResidualBlock(c_in_list_2[idx], downsample_filters[idx], use_pool[idx])
             )
         
         num_upsample_blocks = len(upsample_filters)
-        c_in_list = [downsample_filters[-1], *upsample_filters[:-1]]
-        self.upsample_blocks = nn.ModuleList()
+        c_in_list_1 = [downsample_filters[-1], *upsample_filters[:-1]]
+        self.upsample_blocks_1 = nn.ModuleList()
         for idx in range(num_upsample_blocks):
-            self.upsample_blocks.append(
-                UpsampleDilatedResidualBlock(c_in_list[idx], upsample_filters[idx], use_interpolate[idx])
+            self.upsample_blocks_1.append(
+                UpsampleDilatedResidualBlock(c_in_list_1[idx], upsample_filters[idx], use_interpolate[idx])
+            )
+        c_in_list_2 = [downsample_filters[-1], *upsample_filters[:-1]]
+        self.upsample_blocks_2 = nn.ModuleList()
+        for idx in range(num_upsample_blocks):
+            self.upsample_blocks_2.append(
+                UpsampleDilatedResidualBlock(c_in_list_2[idx], upsample_filters[idx], use_interpolate[idx])
             )
 
         self.num_rv_features = self.num_class + 1
-        self.conv_3x3 = nn.Conv2d(upsample_filters[-1], self.num_rv_features, kernel_size=3, stride=1, padding=1, bias=False)
+        self.conv_3x3_1 = nn.Conv2d(upsample_filters[-1], self.num_rv_features, kernel_size=3, stride=1, padding=1, bias=False)
+        self.conv_3x3_2 = nn.Conv2d(upsample_filters[-1], self.num_rv_features, kernel_size=3, stride=1, padding=1, bias=False)
+        self.fusion_layers = AttentionalFusionModule(self.num_rv_features)
     
     def forward(self, batch_dict, **kwargs):
         batch_points = batch_dict['colored_points'] # (N1 + N2 + ..., 8), Points of (batch_id, x, y, z, intensity, r, g, b)
@@ -156,17 +194,27 @@ class DRNet(nn.Module):
         batch_point_vs = torch.cat(batch_point_vs, dim=0)
         batch_range_images = torch.stack(batch_range_images, dim=0)
         
-        x = batch_range_images
-        skip_features = []
-        for i in range(len(self.downsample_blocks)):
-            x = self.downsample_blocks[i](x)
-            skip_features.append(x)
+        x_1 = batch_range_images[:, :self.channel_split[0], :, :]
+        skip_features_1 = []
+        for i in range(len(self.downsample_blocks_1)):
+            x_1 = self.downsample_blocks_1[i](x_1)
+            skip_features_1.append(x_1)
             
-        for i in range(len(self.upsample_blocks)):
-            x = self.upsample_blocks[i](x, skip_features[-i - 2])
-        batch_range_images = x
+        for i in range(len(self.upsample_blocks_1)):
+            x_1 = self.upsample_blocks_1[i](x_1, skip_features_1[-i - 2])
+        x_1 = self.conv_3x3_1(x_1)
         
-        batch_range_images = self.conv_3x3(batch_range_images)
+        x_2 = batch_range_images[:, self.channel_split[0]:, :, :]
+        skip_features_2 = []
+        for i in range(len(self.downsample_blocks_2)):
+            x_2 = self.downsample_blocks_2[i](x_2)
+            skip_features_2.append(x_2)
+            
+        for i in range(len(self.upsample_blocks_2)):
+            x_2 = self.upsample_blocks_2[i](x_2, skip_features_2[-i - 2])
+        x_2 = self.conv_3x3_2(x_2)
+        
+        batch_range_images = self.fusion_layers(x_1, x_2)
         batch_range_images = F.softmax(batch_range_images, dim=1)
         
         batch_rv_features = []
