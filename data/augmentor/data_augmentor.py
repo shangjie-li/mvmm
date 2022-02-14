@@ -35,39 +35,48 @@ class DataAugmentor(object):
     def __setstate__(self, d):
         self.__dict__.update(d)
 
-    def random_world_flip(self, data_dict=None, config=None):
+    def random_world_flip_along_x(self, data_dict=None, config=None):
         if data_dict is None:
-            return partial(self.random_world_flip, config=config)
-        for cur_axis in config['ALONG_AXIS_LIST']:
-            assert cur_axis in ['x', 'y']
-            gt_boxes, points = getattr(augmentor_utils, 'random_flip_along_%s' % cur_axis)(
-                data_dict['gt_boxes'], data_dict['colored_points'],
-            )
+            return partial(self.random_world_flip_along_x, config=config)
+        gt_boxes, points, enable = augmentor_utils.random_flip_along_x(
+            data_dict['gt_boxes'], data_dict['colored_points']
+        )
         data_dict['gt_boxes'] = gt_boxes
         data_dict['colored_points'] = points
+        data_dict['random_world_flip_along_x'] = enable
+        return data_dict
+
+    def random_world_flip_along_y(self, data_dict=None, config=None):
+        if data_dict is None:
+            return partial(self.random_world_flip_along_y, config=config)
+        gt_boxes, points, enable = augmentor_utils.random_flip_along_y(
+            data_dict['gt_boxes'], data_dict['colored_points']
+        )
+        data_dict['gt_boxes'] = gt_boxes
+        data_dict['colored_points'] = points
+        data_dict['random_world_flip_along_y'] = enable
         return data_dict
 
     def random_world_rotation(self, data_dict=None, config=None):
         if data_dict is None:
             return partial(self.random_world_rotation, config=config)
-        rot_range = config['WORLD_ROT_ANGLE']
-        if not isinstance(rot_range, list):
-            rot_range = [-rot_range, rot_range]
-        gt_boxes, points = augmentor_utils.global_rotation(
-            data_dict['gt_boxes'], data_dict['colored_points'], rot_range=rot_range
+        gt_boxes, points, noise_rotation = augmentor_utils.global_rotation(
+            data_dict['gt_boxes'], data_dict['colored_points'], config['WORLD_ROT_ANGLE']
         )
         data_dict['gt_boxes'] = gt_boxes
         data_dict['colored_points'] = points
+        data_dict['random_world_rotation'] = noise_rotation
         return data_dict
 
     def random_world_scaling(self, data_dict=None, config=None):
         if data_dict is None:
             return partial(self.random_world_scaling, config=config)
-        gt_boxes, points = augmentor_utils.global_scaling(
+        gt_boxes, points, noise_scaling = augmentor_utils.global_scaling(
             data_dict['gt_boxes'], data_dict['colored_points'], config['WORLD_SCALE_RANGE']
         )
         data_dict['gt_boxes'] = gt_boxes
         data_dict['colored_points'] = points
+        data_dict['random_world_scaling'] = noise_scaling
         return data_dict
 
     def forward(self, data_dict):

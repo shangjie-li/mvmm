@@ -94,7 +94,7 @@ class DualDRNet(nn.Module):
         
         self.pi = 3.14159
         self.full_size = self.model_cfg.FULL_SIZE_OF_RANGE_IMAGE
-        self.front_range = self.model_cfg.FRONT_RANGE_OF_RANGE_IMAGE
+        self.front_size = self.model_cfg.FRONT_SIZE_OF_RANGE_IMAGE
         self.lidar_fov_up = self.model_cfg.LIDAR_FOV_UP * self.pi / 180
         self.lidar_fov_down = self.model_cfg.LIDAR_FOV_DOWN * self.pi / 180
         
@@ -180,7 +180,13 @@ class DualDRNet(nn.Module):
             )
             
             full_range_image[:, vs, us] = this_features.t()
-            front_range_image = full_range_image[:, self.front_range[0]:self.front_range[2], self.front_range[1]:self.front_range[3]]
+            if batch_dict.get('random_world_rotation', None) is not None:
+                extra_u = self.full_size[1] * batch_dict['random_world_rotation'][batch_idx] / (2 * self.pi)
+            else:
+                extra_u = 0
+            min_u = int(self.full_size[1] / 2 - self.front_size[1] / 2 - extra_u)
+            max_u = int(self.full_size[1] / 2 + self.front_size[1] / 2 - extra_u)
+            front_range_image = full_range_image[:, 0:self.front_size[0], min_u:max_u]
             
             # import matplotlib.pyplot as plt
             # plt.imshow(front_range_image[3:4, :, :].permute(1, 2, 0).cpu().numpy())
@@ -231,7 +237,13 @@ class DualDRNet(nn.Module):
                 device=range_image.device
             )
             
-            full_range_image[:, self.front_range[0]:self.front_range[2], self.front_range[1]:self.front_range[3]] = range_image
+            if batch_dict.get('random_world_rotation', None) is not None:
+                extra_u = self.full_size[1] * batch_dict['random_world_rotation'][batch_idx] / (2 * self.pi)
+            else:
+                extra_u = 0
+            min_u = int(self.full_size[1] / 2 - self.front_size[1] / 2 - extra_u)
+            max_u = int(self.full_size[1] / 2 + self.front_size[1] / 2 - extra_u)
+            full_range_image[:, 0:self.front_size[0], min_u:max_u] = range_image
             rv_features = full_range_image[:, vs, us].t()
             
             batch_rv_features.append(rv_features)

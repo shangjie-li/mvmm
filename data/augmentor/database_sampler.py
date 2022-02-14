@@ -84,7 +84,7 @@ class DataBaseSampler(object):
             indices = np.random.permutation(len(self.db_infos[class_name]))
             pointer = 0
 
-        sampled_dict = [self.db_infos[class_name][idx] for idx in indices[pointer: pointer + sample_num]]
+        sampled_dict = [self.db_infos[class_name][idx] for idx in indices[pointer:pointer + sample_num]]
         pointer += sample_num
         sample_group['pointer'] = pointer
         sample_group['indices'] = indices
