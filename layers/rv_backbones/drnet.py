@@ -150,9 +150,9 @@ class DRNet(nn.Module):
             max_u = int(min_u + self.front_size[1])
             front_range_image = full_range_image[:, 0:self.front_size[0], min_u:max_u]
             
-            import matplotlib.pyplot as plt
-            plt.imshow(front_range_image[3:4, :, :].permute(1, 2, 0).cpu().numpy())
-            plt.show()
+            # import matplotlib.pyplot as plt
+            # plt.imshow(front_range_image[3:4, :, :].permute(1, 2, 0).cpu().numpy())
+            # plt.show()
             
             batch_point_us.append(us[:, None])
             batch_point_vs.append(vs[:, None])
