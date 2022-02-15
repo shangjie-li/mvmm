@@ -185,7 +185,7 @@ class DualDRNet(nn.Module):
             else:
                 extra_u = 0
             min_u = int(self.full_size[1] / 2 - self.front_size[1] / 2 - extra_u)
-            max_u = int(self.full_size[1] / 2 + self.front_size[1] / 2 - extra_u)
+            max_u = int(min_u + self.front_size[1])
             front_range_image = full_range_image[:, 0:self.front_size[0], min_u:max_u]
             
             # import matplotlib.pyplot as plt
@@ -242,7 +242,7 @@ class DualDRNet(nn.Module):
             else:
                 extra_u = 0
             min_u = int(self.full_size[1] / 2 - self.front_size[1] / 2 - extra_u)
-            max_u = int(self.full_size[1] / 2 + self.front_size[1] / 2 - extra_u)
+            max_u = int(min_u + self.front_size[1])
             full_range_image[:, 0:self.front_size[0], min_u:max_u] = range_image
             rv_features = full_range_image[:, vs, us].t()
             
