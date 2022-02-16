@@ -5,8 +5,11 @@ import copy
 import numpy as np
 import SharedArray
 import torch.distributed as dist
+import torch
+from scipy.spatial import Delaunay
 
 from ops.iou3d_nms import iou3d_nms_utils
+from ops.roiaware_pool3d import roiaware_pool3d_utils
 from utils import box_utils
 
 
@@ -40,6 +43,8 @@ class DataBaseSampler(object):
                 'pointer': len(self.db_infos[class_name]),
                 'indices': np.arange(len(self.db_infos[class_name]))
             }
+        
+        self.min_visible_points = sampler_cfg.MIN_VISIBLE_POINTS
 
     def __getstate__(self):
         d = dict(self.__dict__)
@@ -91,8 +96,8 @@ class DataBaseSampler(object):
         return sampled_dict
 
     @staticmethod
-    def put_boxes_on_road_planes(sampled_boxes, road_planes, calib):
-        a, b, c, d = road_planes
+    def put_boxes_on_road_plane(sampled_boxes, road_plane, calib):
+        a, b, c, d = road_plane
         center_cam = calib.lidar_to_rect(sampled_boxes[:, 0:3])
         cur_height_cam = (-d - a * center_cam[:, 0] - c * center_cam[:, 2]) / b
         center_cam[:, 1] = cur_height_cam
@@ -105,33 +110,95 @@ class DataBaseSampler(object):
         gt_boxes = data_dict['gt_boxes']
         gt_names = data_dict['gt_names']
         points = data_dict['colored_points']
+        road_plane = data_dict['road_plane']
+        calib = data_dict['calib']
         
-        sampled_boxes, mv_height = self.put_boxes_on_road_planes(
-            sampled_boxes, data_dict['road_plane'], data_dict['calib']
-        ) # adjust the height of sampled_boxes
+        sampled_boxes, mv_height = self.put_boxes_on_road_plane(sampled_boxes, road_plane, calib) # adjust the height of sampled_boxes
         sampled_names = np.array([x['name'] for x in total_valid_sampled_dict])
-        
-        obj_points_list = []
+        sampled_obj_points_list = []
         for idx, info in enumerate(total_valid_sampled_dict):
             file_path = self.root_path / info['path']
-            obj_points = np.fromfile(str(file_path), dtype=np.float32).reshape(-1, self.src_point_features)
-            obj_points[:, :3] += info['box3d_lidar'][:3]
-            obj_points[:, 2] -= mv_height[idx] # adjust the height of obj_points
-            obj_points_list.append(obj_points)
-        obj_points = np.concatenate(obj_points_list, axis=0)
+            sampled_obj_points = np.fromfile(str(file_path), dtype=np.float32).reshape(-1, self.src_point_features)
+            sampled_obj_points[:, :3] += info['box3d_lidar'][:3] # move the sampled_obj_points to the location of its box from (0, 0, 0)
+            sampled_obj_points[:, 2] -= mv_height[idx] # adjust the height of sampled_obj_points
+            sampled_obj_points_list.append(sampled_obj_points)
         
-        enlarged_sampled_boxes = box_utils.enlarge_box3d(
-            sampled_boxes[:, 0:7], extra_width=self.sampler_cfg.REMOVE_EXTRA_WIDTH
-        ) # adjust the [l, w, h] of sampled_boxes for box_utils.remove_points_in_boxes3d
-        points = box_utils.remove_points_in_boxes3d(points, enlarged_sampled_boxes)
-        points = np.concatenate([obj_points, points], axis=0)
+        existed_boxes = gt_boxes
+        existed_names = gt_names
+        existed_obj_points_list = []
+        point_indices = roiaware_pool3d_utils.points_in_boxes_cpu(
+            torch.from_numpy(points[:, 0:3]), torch.from_numpy(existed_boxes)
+        ).numpy()  # (nboxes, npoints)
+        for i in range(existed_boxes.shape[0]):
+            existed_obj_points = points[point_indices[i] > 0]
+            existed_obj_points_list.append(existed_obj_points)
         
-        gt_names = np.concatenate([gt_names, sampled_names], axis=0)
-        gt_boxes = np.concatenate([gt_boxes, sampled_boxes], axis=0)
+        background_points = box_utils.remove_points_in_boxes3d(points, existed_boxes)
         
-        data_dict['gt_boxes'] = gt_boxes
-        data_dict['gt_names'] = gt_names
-        data_dict['colored_points'] = points
+        mask = []
+        for j in range(existed_boxes.shape[0]):
+            if existed_obj_points_list[j].shape[0] >= self.min_visible_points:
+                mask.append(True)
+            else:
+                mask.append(False)
+        existed_boxes = existed_boxes[mask]
+        existed_names = existed_names[mask]
+        existed_obj_points_list = [pts for pts in existed_obj_points_list if pts.shape[0] >= self.min_visible_points]
+        
+        for i in range(sampled_boxes.shape[0]):
+            sampled_obj_points = sampled_obj_points_list[i]
+            sampled_pts_img, _ = calib.lidar_to_img(sampled_obj_points[:, 0:3])
+            sampled_tri = Delaunay(sampled_pts_img)
+            
+            valid_flag = True
+            for j in range(existed_boxes.shape[0]):
+                existed_obj_points = existed_obj_points_list[j]
+                existed_pts_img, _ = calib.lidar_to_img(existed_obj_points[:, 0:3])
+                existed_tri = Delaunay(existed_pts_img)
+                
+                dis_s = np.mean(np.sqrt(sampled_obj_points[:, 0] ** 2 + sampled_obj_points[:, 1] ** 2 + sampled_obj_points[:, 2] ** 2))
+                dis_e = np.mean(np.sqrt(existed_obj_points[:, 0] ** 2 + existed_obj_points[:, 1] ** 2 + existed_obj_points[:, 2] ** 2))
+                if dis_s < dis_e: # which means existed_obj is occluded
+                    visible_pts_mask = sampled_tri.find_simplex(existed_pts_img) < 0
+                    if existed_obj_points[visible_pts_mask].shape[0] < self.min_visible_points:
+                        valid_flag = False
+                        break
+                else: # which means sampled_obj is occluded
+                    visible_pts_mask = existed_tri.find_simplex(sampled_pts_img) < 0
+                    sampled_obj_points = sampled_obj_points[visible_pts_mask]
+                    if sampled_obj_points.shape[0] < self.min_visible_points:
+                        valid_flag = False
+                        break
+                    else:
+                        sampled_pts_img, _ = calib.lidar_to_img(sampled_obj_points[:, 0:3])
+                        sampled_tri = Delaunay(sampled_pts_img)
+            
+            if not valid_flag: continue
+            background_pts_img, _ = calib.lidar_to_img(background_points[:, 0:3])
+            visible_pts_mask = sampled_tri.find_simplex(background_pts_img) < 0
+            background_points = background_points[visible_pts_mask]
+            
+            for j in range(existed_boxes.shape[0]):
+                existed_obj_points = existed_obj_points_list[j]
+                existed_pts_img, _ = calib.lidar_to_img(existed_obj_points[:, 0:3])
+                
+                dis_s = np.mean(np.sqrt(sampled_obj_points[:, 0] ** 2 + sampled_obj_points[:, 1] ** 2 + sampled_obj_points[:, 2] ** 2))
+                dis_e = np.mean(np.sqrt(existed_obj_points[:, 0] ** 2 + existed_obj_points[:, 1] ** 2 + existed_obj_points[:, 2] ** 2))
+                if dis_s < dis_e: # which means existed_obj is occluded
+                    visible_pts_mask = sampled_tri.find_simplex(existed_pts_img) < 0
+                    existed_obj_points_list[j] = existed_obj_points[visible_pts_mask]
+                else: # which means sampled_obj is occluded
+                    pass
+            
+            existed_boxes = np.concatenate([existed_boxes, sampled_boxes[i:i + 1]], axis=0)
+            existed_names = np.concatenate([existed_names, sampled_names[i:i + 1]], axis=0)
+            existed_obj_points_list.append(sampled_obj_points)
+        
+        background_points = box_utils.remove_points_in_boxes3d(background_points, existed_boxes)
+        
+        data_dict['gt_boxes'] = existed_boxes
+        data_dict['gt_names'] = existed_names
+        data_dict['colored_points'] = np.concatenate([background_points, np.concatenate(existed_obj_points_list, axis=0)], axis=0)
         return data_dict
 
     def __call__(self, data_dict):

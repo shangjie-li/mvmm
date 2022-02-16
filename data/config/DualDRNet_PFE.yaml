@@ -20,6 +20,22 @@ DATA_CONFIG:
     USED_FEATURE_LIST: ['x', 'y', 'z', 'range', 'intensity', 'r', 'g', 'b']
     
     DATA_AUGMENTOR:
+        - NAME: gt_sampling
+          DB_INFO_PATH: kitti_dbinfos_train.pkl
+          PREPARE: {
+             filter_by_min_points: ['Car:5', 'Pedestrian:5', 'Cyclist:5'],
+             filter_by_difficulty: [-1],
+          }
+          SAMPLE_GROUPS: ['Car:5', 'Pedestrian:5', 'Cyclist:5']
+          MIN_VISIBLE_POINTS: 5
+          
+        - NAME: random_world_flip_along_x
+        
+        - NAME: random_world_rotation
+          WORLD_ROT_ANGLE: [-0.78539816, 0.78539816]
+        
+        - NAME: random_world_scaling
+          WORLD_SCALE_RANGE: [0.95, 1.05]
     
     DATA_PROCESSOR:
         - NAME: mask_points_and_boxes_outside_range

@@ -270,7 +270,7 @@ class KittiDataset(torch_data.Dataset):
                 filepath = database_save_path / filename
                 gt_points = colored_points[point_indices[i] > 0]
 
-                gt_points[:, :3] -= gt_boxes[i, :3]
+                gt_points[:, :3] -= gt_boxes[i, :3] # move the points of object to (0, 0, 0)
                 with open(filepath, 'w') as f:
                     gt_points.tofile(f)
 
