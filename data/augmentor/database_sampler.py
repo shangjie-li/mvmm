@@ -6,6 +6,7 @@ import numpy as np
 import SharedArray
 import torch.distributed as dist
 import torch
+from scipy.spatial import ConvexHull
 from scipy.spatial import Delaunay
 
 from ops.iou3d_nms import iou3d_nms_utils
@@ -135,64 +136,59 @@ class DataBaseSampler(object):
         
         background_points = box_utils.remove_points_in_boxes3d(points, existed_boxes)
         
-        mask = []
-        for j in range(existed_boxes.shape[0]):
-            if existed_obj_points_list[j].shape[0] >= self.min_visible_points:
-                mask.append(True)
-            else:
-                mask.append(False)
-        existed_boxes = existed_boxes[mask]
-        existed_names = existed_names[mask]
-        existed_obj_points_list = [pts for pts in existed_obj_points_list if pts.shape[0] >= self.min_visible_points]
+        all_boxes = np.concatenate([existed_boxes, sampled_boxes], axis=0)
+        all_names = np.concatenate([existed_names, sampled_names], axis=0)
+        all_obj_points_list = existed_obj_points_list + sampled_obj_points_list
         
-        for i in range(sampled_boxes.shape[0]):
-            sampled_obj_points = sampled_obj_points_list[i]
-            sampled_pts_img, _ = calib.lidar_to_img(sampled_obj_points[:, 0:3])
-            sampled_tri = Delaunay(sampled_pts_img)
-            
-            valid_flag = True
-            for j in range(existed_boxes.shape[0]):
-                existed_obj_points = existed_obj_points_list[j]
-                existed_pts_img, _ = calib.lidar_to_img(existed_obj_points[:, 0:3])
-                existed_tri = Delaunay(existed_pts_img)
+        mask = [pts.shape[0] >= self.min_visible_points for pts in all_obj_points_list]
+        all_boxes = all_boxes[mask]
+        all_names = all_names[mask]
+        all_obj_points_list = [pts for pts in all_obj_points_list if pts.shape[0] >= self.min_visible_points]
+        
+        num_obj = len(all_obj_points_list)
+        obj_dis_list = [np.mean(np.sqrt(pts[:, 0] ** 2 + pts[:, 1] ** 2 + pts[:, 2] ** 2)) for pts in all_obj_points_list]
+        indices = list(np.argsort(obj_dis_list))
+        
+        ordered_boxes = all_boxes[indices]
+        ordered_names = all_names[indices]
+        ordered_obj_points_list = [all_obj_points_list[idx] for idx in indices]
+        
+        if num_obj > 1:
+            for i in range(1, num_obj):
+                pts_i = ordered_obj_points_list[i]
+                pts_img_i, _ = calib.lidar_to_img(pts_i[:, 0:3])
                 
-                dis_s = np.mean(np.sqrt(sampled_obj_points[:, 0] ** 2 + sampled_obj_points[:, 1] ** 2 + sampled_obj_points[:, 2] ** 2))
-                dis_e = np.mean(np.sqrt(existed_obj_points[:, 0] ** 2 + existed_obj_points[:, 1] ** 2 + existed_obj_points[:, 2] ** 2))
-                if dis_s < dis_e: # which means existed_obj is occluded
-                    visible_pts_mask = sampled_tri.find_simplex(existed_pts_img) < 0
-                    if existed_obj_points[visible_pts_mask].shape[0] < self.min_visible_points:
-                        valid_flag = False
-                        break
-                else: # which means sampled_obj is occluded
-                    visible_pts_mask = existed_tri.find_simplex(sampled_pts_img) < 0
-                    sampled_obj_points = sampled_obj_points[visible_pts_mask]
-                    if sampled_obj_points.shape[0] < self.min_visible_points:
-                        valid_flag = False
-                        break
-                    else:
-                        sampled_pts_img, _ = calib.lidar_to_img(sampled_obj_points[:, 0:3])
-                        sampled_tri = Delaunay(sampled_pts_img)
+                for j in range(0, i):
+                    pts_j = ordered_obj_points_list[j]
+                    pts_img_j, _ = calib.lidar_to_img(pts_j[:, 0:3])
+                    
+                    if pts_img_j.shape[0] >= self.min_visible_points:
+                        hull = ConvexHull(pts_img_j)
+                        pts_of_hull = pts_img_j[hull.vertices]
+                        tri = Delaunay(pts_of_hull)
+                        
+                        if pts_img_i.shape[0] >= self.min_visible_points:
+                            visible_pts_mask = tri.find_simplex(pts_img_i) < 0
+                            ordered_obj_points_list[i] = pts_i[visible_pts_mask]
+                            pts_i = ordered_obj_points_list[i]
+                            pts_img_i, _ = calib.lidar_to_img(pts_i[:, 0:3])
+        
+        mask = [pts.shape[0] >= self.min_visible_points for pts in ordered_obj_points_list]
+        existed_boxes = ordered_boxes[mask]
+        existed_names = ordered_names[mask]
+        existed_obj_points_list = [pts for pts in ordered_obj_points_list if pts.shape[0] >= self.min_visible_points]
+        
+        for i in range(len(existed_obj_points_list)):
+            pts = existed_obj_points_list[i]
+            pts_img, _ = calib.lidar_to_img(pts[:, 0:3])
             
-            if not valid_flag: continue
+            hull = ConvexHull(pts_img)
+            pts_of_hull = pts_img[hull.vertices]
+            tri = Delaunay(pts_of_hull)
+            
             background_pts_img, _ = calib.lidar_to_img(background_points[:, 0:3])
-            visible_pts_mask = sampled_tri.find_simplex(background_pts_img) < 0
+            visible_pts_mask = tri.find_simplex(background_pts_img) < 0
             background_points = background_points[visible_pts_mask]
-            
-            for j in range(existed_boxes.shape[0]):
-                existed_obj_points = existed_obj_points_list[j]
-                existed_pts_img, _ = calib.lidar_to_img(existed_obj_points[:, 0:3])
-                
-                dis_s = np.mean(np.sqrt(sampled_obj_points[:, 0] ** 2 + sampled_obj_points[:, 1] ** 2 + sampled_obj_points[:, 2] ** 2))
-                dis_e = np.mean(np.sqrt(existed_obj_points[:, 0] ** 2 + existed_obj_points[:, 1] ** 2 + existed_obj_points[:, 2] ** 2))
-                if dis_s < dis_e: # which means existed_obj is occluded
-                    visible_pts_mask = sampled_tri.find_simplex(existed_pts_img) < 0
-                    existed_obj_points_list[j] = existed_obj_points[visible_pts_mask]
-                else: # which means sampled_obj is occluded
-                    pass
-            
-            existed_boxes = np.concatenate([existed_boxes, sampled_boxes[i:i + 1]], axis=0)
-            existed_names = np.concatenate([existed_names, sampled_names[i:i + 1]], axis=0)
-            existed_obj_points_list.append(sampled_obj_points)
         
         background_points = box_utils.remove_points_in_boxes3d(background_points, existed_boxes)
         

@@ -52,8 +52,8 @@
 | 45 | xyzri(nm)            | flip, rotation, scaling           | 83.6, 72.3, 67.6 | 42.9, 38.5, 36.5 | 52.7, 37.7, 34.9 | -       |
 | 46 | rgb(nm)              | flip, rotation, scaling           | 83.3, 72.4, 67.5 | 44.8, 41.3, 37.5 | 51.2, 35.3, 33.5 | -       |
 | 47 | xyzri(nm) + rgb(nm)  | flip, rotation, scaling           | 82.9, 72.3, 67.5 | 44.0, 38.6, 36.5 | 53.4, 37.3, 35.9 | -       |
-| 48 | xyzri(nm)            | sampling, flip, rotation, scaling |
-| 49 | rgb(nm)              | sampling, flip, rotation, scaling |
+| 48 | xyzri(nm)            | sampling, flip, rotation, scaling | 87.3, 76.7, 74.9 | 52.0, 45.9, 42.8 | 69.2, 53.6, 50.8 | -       |
+| 49 | rgb(nm)              | sampling, flip, rotation, scaling | 86.7, 77.0, 75.5 | 50.1, 45.3, 42.3 | 72.2, 55.8, 53.7 | -       |
 | 50 | xyzri(nm) + rgb(nm)  | sampling, flip, rotation, scaling |
 
 
