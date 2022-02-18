@@ -220,7 +220,10 @@ class DataBaseSampler(object):
         
         data_dict['gt_boxes'] = existed_boxes
         data_dict['gt_names'] = existed_names
-        data_dict['colored_points'] = np.concatenate([background_points, np.concatenate(existed_obj_points_list, axis=0)], axis=0)
+        if len(existed_obj_points_list) > 0:
+            data_dict['colored_points'] = np.concatenate([background_points, np.concatenate(existed_obj_points_list, axis=0)], axis=0)
+        else:
+            data_dict['colored_points'] = background_points
         return data_dict
 
     def __call__(self, data_dict):
