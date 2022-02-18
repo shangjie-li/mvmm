@@ -54,7 +54,7 @@
 | 47 | xyzri(nm) + rgb(nm)  | flip, rotation, scaling           | 82.9, 72.3, 67.5 | 44.0, 38.6, 36.5 | 53.4, 37.3, 35.9 | -       |
 | 48 | xyzri(nm)            | sampling, flip, rotation, scaling | 87.3, 76.7, 74.9 | 52.0, 45.9, 42.8 | 69.2, 53.6, 50.8 | -       |
 | 49 | rgb(nm)              | sampling, flip, rotation, scaling | 86.7, 77.0, 75.5 | 50.1, 45.3, 42.3 | 72.2, 55.8, 53.7 | -       |
-| 50 | xyzri(nm) + rgb(nm)  | sampling, flip, rotation, scaling |
+| 50 | xyzri(nm) + rgb(nm)  | sampling, flip, rotation, scaling | 87.1, 77.0, 75.3 | 51.9, 46.3, 43.4 | 74.5, 57.4, 55.4 | -       |
 
 
 ## Ablation Experiments for SECOND
