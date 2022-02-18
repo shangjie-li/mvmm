@@ -26,7 +26,7 @@ DATA_CONFIG:
              filter_by_min_points: ['Car:5', 'Pedestrian:5', 'Cyclist:5'],
              filter_by_difficulty: [-1],
           }
-          SAMPLE_GROUPS: ['Car:15', 'Pedestrian:15', 'Cyclist:15']
+          SAMPLE_GROUPS: ['Car:5', 'Pedestrian:5', 'Cyclist:5']
           MIN_VISIBLE_POINTS: 5
           
         - NAME: random_world_flip_along_x
