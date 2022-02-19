@@ -46,17 +46,6 @@ class DataAugmentor(object):
         data_dict['random_world_flip_along_x'] = enable
         return data_dict
 
-    def random_world_flip_along_y(self, data_dict=None, config=None):
-        if data_dict is None:
-            return partial(self.random_world_flip_along_y, config=config)
-        gt_boxes, points, enable = augmentor_utils.random_flip_along_y(
-            data_dict['gt_boxes'], data_dict['colored_points']
-        )
-        data_dict['gt_boxes'] = gt_boxes
-        data_dict['colored_points'] = points
-        data_dict['random_world_flip_along_y'] = enable
-        return data_dict
-
     def random_world_rotation(self, data_dict=None, config=None):
         if data_dict is None:
             return partial(self.random_world_rotation, config=config)

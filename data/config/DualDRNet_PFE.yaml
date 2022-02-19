@@ -28,7 +28,9 @@ DATA_CONFIG:
           }
           SAMPLE_GROUPS: ['Car:5', 'Pedestrian:5', 'Cyclist:5']
           MIN_VISIBLE_POINTS: 5
-          
+          REMOVE_OCCLUDED_POINTS: True
+          CHANGE_OBJECT_POSITION: True
+    
         - NAME: random_world_flip_along_x
         
         - NAME: random_world_rotation
