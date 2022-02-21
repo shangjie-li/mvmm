@@ -72,19 +72,19 @@ class Encoder(nn.Module):
         os = 1
         
         x, skip_features, os = self.run_layers(x, self.conv1, skip_features, os) # skip_features won't be changed
-        x, skip_features, os = self.run_layers(x, self.bn1, skip_features, os) # skip_features won't be changed
-        x, skip_features, os = self.run_layers(x, self.relu1, skip_features, os) # skip_features won't be changed
+        x, skip_features, os = self.run_layers(x, self.bn1, skip_features, os)
+        x, skip_features, os = self.run_layers(x, self.relu1, skip_features, os)
         
         x, skip_features, os = self.run_layers(x, self.encoder1, skip_features, os)
         x, skip_features, os = self.run_layers(x, self.dropout, skip_features, os) # skip_features won't be changed
         x, skip_features, os = self.run_layers(x, self.encoder2, skip_features, os)
-        x, skip_features, os = self.run_layers(x, self.dropout, skip_features, os) # skip_features won't be changed
+        x, skip_features, os = self.run_layers(x, self.dropout, skip_features, os)
         x, skip_features, os = self.run_layers(x, self.encoder3, skip_features, os)
-        x, skip_features, os = self.run_layers(x, self.dropout, skip_features, os) # skip_features won't be changed
+        x, skip_features, os = self.run_layers(x, self.dropout, skip_features, os)
         x, skip_features, os = self.run_layers(x, self.encoder4, skip_features, os)
-        x, skip_features, os = self.run_layers(x, self.dropout, skip_features, os) # skip_features won't be changed
+        x, skip_features, os = self.run_layers(x, self.dropout, skip_features, os)
         x, skip_features, os = self.run_layers(x, self.encoder5, skip_features, os)
-        x, skip_features, os = self.run_layers(x, self.dropout, skip_features, os) # skip_features won't be changed
+        x, skip_features, os = self.run_layers(x, self.dropout, skip_features, os)
         
         return x, skip_features
 
@@ -107,7 +107,7 @@ class Decoder(nn.Module):
     
     def _make_layers(self, block, planes, stride):
         layers = []
-        layers.append(('upconv', nn.ConvTranspose2d(planes[0], planes[1], kernel_size=[1, 4], stride=[1, 2], padding=[0, 1]))) # kernel_size = [1, 3] is better?
+        layers.append(('upconv', nn.ConvTranspose2d(planes[0], planes[1], kernel_size=[1, 4], stride=[1, 2], padding=[0, 1]))) # padding needn't be set
         layers.append(('bn', nn.BatchNorm2d(planes[1], momentum=0.01)))
         layers.append(('relu', nn.LeakyReLU(0.1)))
         

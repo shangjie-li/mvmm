@@ -1,6 +1,6 @@
- * The 3D AP with 11 Recall Positions (R11) is used to evaluate the models. The latency is tested on a single 1080Ti GPU.
-
 ## Ablation Experiments for PointPillars
+
+ * The 3D AP with 11 Recall Positions (R11) is used to evaluate the models. The latency is tested on a single 1080Ti GPU.
 
 | ID | Used features        | Data augmentation                 | Car              | Pedestrian       | Cyclist          | Latency |
 |:--:|:--------------------:|:---------------------------------:|:----------------:|:----------------:|:----------------:|:-------:|
@@ -15,9 +15,23 @@
 | 09 | xyzi                 | scaling                           | 74.2, 63.5, 57.2 | 35.9, 31.0, 29.9 | 54.5, 33.8, 31.4 | 19ms    |
 
 
-## Ablation Experiments for MVMM (pillar)
+## Ablation Experiments for SECOND
 
-| ID | RV backbone                        | Pillar bridge       | Car              | Pedestrian       | Cyclist          | Latency |
+ * The 3D AP with 11 Recall Positions (R11) is used to evaluate the models. The latency is tested on a single 1080Ti GPU.
+
+| ID | Used features        | Data augmentation                 | Car              | Pedestrian       | Cyclist          | Latency |
+|:--:|:--------------------:|:---------------------------------:|:----------------:|:----------------:|:----------------:|:-------:|
+| 17 | xyzi                 | sampling, flip, rotation, scaling | 88.2, 78.5, 77.4 | 55.3, 51.4, 47.5 | 80.9, 67.6, 63.1 | 29ms    |
+| 18 | occupancy            | sampling, flip, rotation, scaling | 87.7, 78.0, 76.7 | 51.6, 49.6, 45.2 | 80.3, 62.0, 58.8 | 29ms    |
+| 19 | xyzi                 | -                                 | 78.1, 64.7, 64.0 | 44.1, 38.5, 33.7 | 55.1, 37.7, 36.5 | 29ms    |
+| 20 | occupancy            | -                                 | 76.4, 64.3, 63.5 | 45.1, 35.3, 34.5 | 51.7, 36.2, 31.5 | 29ms    |
+
+
+## Ablation Experiments for MVMM
+
+ * The 3D AP with 11 Recall Positions (R11) is used to evaluate the models. The latency is tested on a single 1080Ti GPU.
+
+| ID | RV backbone                        | PV bridge           | Car              | Pedestrian       | Cyclist          | Latency |
 |:--:|:----------------------------------:|:-------------------:|:----------------:|:----------------:|:----------------:|:-------:|
 | 10 | xyzi -> DRB(4, 64)                 | PFE(64, 64)         | 57.4, 49.3, 44.6 | 29.6, 24.4, 20.1 | 47.1, 29.1, 27.9 | -       |
 | 11 | xyzi -> DRB(4, 64)                 | xyz -> PFE(67, 64)  | 69.4, 55.0, 53.8 | 30.8, 28.7, 24.6 | 44.5, 30.8, 27.3 | -       |
@@ -26,6 +40,9 @@
 | 14 | xyzri -> DRNet                     | xyz -> PFE(67, 64)  | 69.5, 55.6, 55.0 | 35.9, 30.2, 26.1 | 45.8, 31.0, 27.9 | 33ms    |
 | 15 | xyzrirgb -> DRNet                  | xyz -> PFE(67, 64)  | 68.2, 54.6, 54.0 | 29.4, 23.8, 23.2 | 43.9, 29.0, 28.5 | 33ms    |
 | 16 | rgb -> DRNet                       | xyz -> PFE(67, 64)  | 65.7, 53.5, 52.3 | 29.7, 24.9, 23.6 | 43.5, 26.8, 26.6 | 33ms    |
+| 21 | xyzi -> DRNet -> 64                | VFE(1-2-3-4-5)      | 78.8, 65.3, 63.9 | 39.2, 32.8, 31.7 | 55.8, 37.9, 37.4 | -       |
+| 22 | xyzi -> DRNet -> 3                 | VFE(0-1-2-3-4-5)    | 74.3, 65.3, 64.3 | 41.9, 36.8, 32.3 | 48.4, 32.6, 32.1 | -       |
+| 23 | xyzi -> DRNet -> 3(sm)             | VFE(0-1-2-3-4-5)    | 79.2, 65.0, 63.9 | 41.9, 35.5, 34.1 | 52.6, 36.2, 31.5 | -       |
 | 24 | xyzi -> DRNet -> 4                 | xyz -> PFE(7, 64)   | 64.9, 53.1, 52.6 | 30.5, 25.9, 24.2 | 45.5, 31.2, 27.9 | 30ms    |
 | 25 | xyzi -> DRNet -> 4(sm)             | xyz -> PFE(7, 64)   | 70.1, 60.9, 55.6 | 35.8, 30.4, 26.2 | 51.0, 30.8, 30.2 | 30ms    |
 | 26 | rgb -> DRNet -> 4                  | xyz -> PFE(7, 64)   | 68.0, 54.4, 54.2 | 36.2, 30.9, 26.6 | 48.1, 33.2, 29.7 | 30ms    |
@@ -40,48 +57,45 @@
 | 35 | rgb(nm) -> DRNet -> 4(sm)          | xyz -> PFE(7, 64)   | 70.3, 60.9, 55.8 | 34.4, 29.7, 25.5 | 53.2, 35.9, 34.9 | 30ms    |
 | 36 | xyzrirgb(nm) -> DRNet -> 4         | xyz -> PFE(7, 64)   | 63.5, 52.9, 52.2 | 30.0, 25.0, 24.0 | 39.0, 26.8, 25.5 | 30ms    |
 | 37 | xyzrirgb(nm) -> DRNet -> 4(sm)     | xyz -> PFE(7, 64)   | 68.5, 59.6, 55.2 | 37.4, 31.9, 27.3 | 51.9, 35.0, 31.5 | 30ms    |
-| 38 | xyzri(nm) + rgb(nm) -> DualDRNet   | xyz -> PFE(7, 64)   | 71.3, 61.1, 55.9 | 37.0, 31.5, 26.7 | 48.9, 32.9, 29.8 | 43ms    |
-| 39 | xyzri + rgb(nm) -> DualDRNet       | xyz -> PFE(7, 64)   | 69.2, 60.5, 55.5 | 36.3, 31.5, 26.3 | 51.1, 34.0, 30.0 | 43ms    |
-| 40 | xyzri + rgb -> DualDRNet           | xyz -> PFE(7, 64)   | 70.9, 60.6, 55.7 | 35.0, 29.4, 25.1 | 49.2, 33.0, 29.6 | 43ms    |
+| 38 | xyzri(nm)+rgb(nm) -> DualDRNet     | xyz -> PFE(7, 64)   | 71.3, 61.1, 55.9 | 37.0, 31.5, 26.7 | 48.9, 32.9, 29.8 | 43ms    |
+| 39 | xyzri+rgb(nm) -> DualDRNet         | xyz -> PFE(7, 64)   | 69.2, 60.5, 55.5 | 36.3, 31.5, 26.3 | 51.1, 34.0, 30.0 | 43ms    |
+| 40 | xyzri+rgb -> DualDRNet             | xyz -> PFE(7, 64)   | 70.9, 60.6, 55.7 | 35.0, 29.4, 25.1 | 49.2, 33.0, 29.6 | 43ms    |
+| 41 | xyzi(nm) -> DRNet -> 4(sm)         | VFE(0-1-2-3-4-5)    | 79.2, 65.1, 63.7 | 41.7, 35.6, 34.2 | 54.8, 37.5, 32.8 | 49ms    |
+| 42 | xyzri(nm) -> DRNet -> 4(sm)        | VFE(0-1-2-3-4-5)    | 76.4, 64.0, 63.1 | 42.3, 35.8, 34.7 | 51.6, 36.0, 31.4 | 49ms    |
+| 43 | rgb(nm) -> DRNet -> 4(sm)          | VFE(0-1-2-3-4-5)    | 77.0, 64.0, 62.9 | 39.4, 33.7, 32.3 | 53.9, 36.8, 32.4 | 49ms    |
+| 44 | xyzri(nm)+rgb(nm) -> DualDRNet     | VFE(0-1-2-3-4-5)    | 75.6, 63.7, 63.0 | 44.3, 38.1, 33.9 | 53.9, 37.2, 32.4 | 49ms    |
 
 
-## Ablation Experiments for MVMM with data augmentation (pillar)
+## Ablation Experiments of data augmentation for MVMM with PFE
+
+ * The 3D AP with 11 Recall Positions (R11) is used to evaluate the models. The latency is tested on a single 1080Ti GPU.
 
 | ID | Used features        | Data augmentation                 | Car              | Pedestrian       | Cyclist          | Latency |
 |:--:|:--------------------:|:---------------------------------:|:----------------:|:----------------:|:----------------:|:-------:|
 | 45 | xyzri(nm)            | flip, rotation, scaling           | 83.6, 72.3, 67.6 | 42.9, 38.5, 36.5 | 52.7, 37.7, 34.9 | -       |
 | 46 | rgb(nm)              | flip, rotation, scaling           | 83.3, 72.4, 67.5 | 44.8, 41.3, 37.5 | 51.2, 35.3, 33.5 | -       |
-| 47 | xyzri(nm) + rgb(nm)  | flip, rotation, scaling           | 82.9, 72.3, 67.5 | 44.0, 38.6, 36.5 | 53.4, 37.3, 35.9 | -       |
+| 47 | xyzri(nm)+rgb(nm)    | flip, rotation, scaling           | 82.9, 72.3, 67.5 | 44.0, 38.6, 36.5 | 53.4, 37.3, 35.9 | -       |
 | 48 | xyzri(nm)            | sampling, flip, rotation, scaling | 87.3, 76.7, 74.9 | 52.0, 45.9, 42.8 | 69.2, 53.6, 50.8 | -       |
 | 49 | rgb(nm)              | sampling, flip, rotation, scaling | 86.7, 77.0, 75.5 | 50.1, 45.3, 42.3 | 72.2, 55.8, 53.7 | -       |
-| 50 | xyzri(nm) + rgb(nm)  | sampling, flip, rotation, scaling | 87.1, 77.0, 75.3 | 51.9, 46.3, 43.4 | 74.5, 57.4, 55.4 | -       |
+| 50 | xyzri(nm)+rgb(nm)    | sampling, flip, rotation, scaling | 87.1, 77.0, 75.3 | 51.9, 46.3, 43.4 | 74.5, 57.4, 55.4 | -       |
 
 
-## Ablation Experiments for SECOND
+## Ablation Experiments of rv backbones for MVMM
 
-| ID | Used features        | Data augmentation                 | Car              | Pedestrian       | Cyclist          | Latency |
-|:--:|:--------------------:|:---------------------------------:|:----------------:|:----------------:|:----------------:|:-------:|
-| 17 | xyzi                 | sampling, flip, rotation, scaling | 88.2, 78.5, 77.4 | 55.3, 51.4, 47.5 | 80.9, 67.6, 63.1 | 29ms    |
-| 18 | occupancy            | sampling, flip, rotation, scaling | 87.7, 78.0, 76.7 | 51.6, 49.6, 45.2 | 80.3, 62.0, 58.8 | 29ms    |
-| 19 | xyzi                 | -                                 | 78.1, 64.7, 64.0 | 44.1, 38.5, 33.7 | 55.1, 37.7, 36.5 | 29ms    |
-| 20 | occupancy            | -                                 | 76.4, 64.3, 63.5 | 45.1, 35.3, 34.5 | 51.7, 36.2, 31.5 | 29ms    |
+ * The 3D AP with 11 Recall Positions (R11) is used to evaluate the models. The latency is tested on a single 1080Ti GPU.
 
-
-## Ablation Experiments for MVMM (voxel)
-
-| ID | RV backbone                        | Voxel bridge        | Car              | Pedestrian       | Cyclist          | Latency |
-|:--:|:----------------------------------:|:-------------------:|:----------------:|:----------------:|:----------------:|:-------:|
-| 21 | xyzi -> DRNet -> 64                | VFE(1-2-3-4-5)      | 78.8, 65.3, 63.9 | 39.2, 32.8, 31.7 | 55.8, 37.9, 37.4 | -       |
-| 22 | xyzi -> DRNet -> 3                 | VFE(0-1-2-3-4-5)    | 74.3, 65.3, 64.3 | 41.9, 36.8, 32.3 | 48.4, 32.6, 32.1 | -       |
-| 23 | xyzi -> DRNet -> 3(sm)             | VFE(0-1-2-3-4-5)    | 79.2, 65.0, 63.9 | 41.9, 35.5, 34.1 | 52.6, 36.2, 31.5 | -       |
-| 41 | xyzi(nm) -> DRNet -> 4(sm)         | VFE(0-1-2-3-4-5)    | 79.2, 65.1, 63.7 | 41.7, 35.6, 34.2 | 54.8, 37.5, 32.8 | 49ms    |
-| 42 | xyzri(nm) -> DRNet -> 4(sm)        | VFE(0-1-2-3-4-5)    | 76.4, 64.0, 63.1 | 42.3, 35.8, 34.7 | 51.6, 36.0, 31.4 | 49ms    |
-| 43 | rgb(nm) -> DRNet -> 4(sm)          | VFE(0-1-2-3-4-5)    | 77.0, 64.0, 62.9 | 39.4, 33.7, 32.3 | 53.9, 36.8, 32.4 | 49ms    |
-| 44 | xyzri(nm) + rgb(nm) -> DualDRNet   | VFE(0-1-2-3-4-5)    | 75.6, 63.7, 63.0 | 44.3, 38.1, 33.9 | 53.9, 37.2, 32.4 | 49ms    |
+| ID | RV backbone               | PV bridge   | Sampling       | Car              | Pedestrian       | Cyclist          | Latency |
+|:--:|:-------------------------:|:-----------:|:--------------:|:----------------:|:----------------:|:----------------:|:-------:|
+| 51 | xyzri(nm) -> DRNet        | PFE(13, 64) | 3*5, ROP, COP  |
+| 52 | rgb(nm) -> DRNet          | PFE(13, 64) | 3*5, ROP, COP  |
+| 53 | xyzri(nm) -> DRNet        | PFE(13, 64) | 3*5, COP       |
+| 54 | rgb(nm) -> DRNet          | PFE(13, 64) | 3*5, COP       |
+| 55 | xyzri(nm) -> DRNet        | PFE(13, 64) | 3*5,           |
+| 56 | rgb(nm) -> DRNet          | PFE(13, 64) | 3*5,           |
+| 57 | xyzri(nm) -> RangeNet     | PFE(13, 64) | 3*5, ROP, COP  |
+| 58 | rgb(nm) -> RangeNet       | PFE(13, 64) | 3*5, ROP, COP  |
+| 59 | xyzri(nm) -> ResNet       | PFE(13, 64) | 3*5, ROP, COP  |
+| 60 | rgb(nm) -> ResNet         | PFE(13, 64) | 3*5, ROP, COP  |
 
 
-## Ablation Experiments for MVMM with data augmentation (voxel)
-
-| ID | Used features        | Data augmentation                 | Car              | Pedestrian       | Cyclist          | Latency |
-|:--:|:--------------------:|:---------------------------------:|:----------------:|:----------------:|:----------------:|:-------:|
 
