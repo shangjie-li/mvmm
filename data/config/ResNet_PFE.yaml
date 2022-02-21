@@ -83,12 +83,9 @@ MODEL:
 
     DENSE_HEAD:
         NAME: AnchorHeadSingle
-        CLASS_AGNOSTIC: False
-
-        USE_DIRECTION_CLASSIFIER: True
+        NUM_DIR_BINS: 2
         DIR_OFFSET: 0.78539
         DIR_LIMIT_OFFSET: 0.0
-        NUM_DIR_BINS: 2
 
         ANCHOR_GENERATOR_CONFIG: [
             {
@@ -96,7 +93,6 @@ MODEL:
                 'anchor_sizes': [[3.9, 1.6, 1.56]],
                 'anchor_rotations': [0, 1.57],
                 'anchor_bottom_heights': [-1.78],
-                'align_center': False,
                 'feature_map_stride': 2,
                 'matched_threshold': 0.6,
                 'unmatched_threshold': 0.45
@@ -106,7 +102,6 @@ MODEL:
                 'anchor_sizes': [[0.8, 0.6, 1.73]],
                 'anchor_rotations': [0, 1.57],
                 'anchor_bottom_heights': [-0.6],
-                'align_center': False,
                 'feature_map_stride': 2,
                 'matched_threshold': 0.5,
                 'unmatched_threshold': 0.35
@@ -116,20 +111,11 @@ MODEL:
                 'anchor_sizes': [[1.76, 0.6, 1.73]],
                 'anchor_rotations': [0, 1.57],
                 'anchor_bottom_heights': [-0.6],
-                'align_center': False,
                 'feature_map_stride': 2,
                 'matched_threshold': 0.5,
                 'unmatched_threshold': 0.35
             }
         ]
-
-        TARGET_ASSIGNER_CONFIG:
-            NAME: AxisAlignedTargetAssigner
-            POS_FRACTION: -1.0
-            SAMPLE_SIZE: 512
-            NORM_BY_NUM_EXAMPLES: False
-            MATCH_HEIGHT: False
-            BOX_CODER: ResidualCoder
 
         LOSS_CONFIG:
             LOSS_WEIGHTS: {
@@ -142,12 +128,8 @@ MODEL:
     POST_PROCESSING:
         RECALL_THRESH_LIST: [0.3, 0.5, 0.7]
         SCORE_THRESH: 0.1
-        OUTPUT_RAW_SCORE: False
-
         EVAL_METRIC: kitti
-
         NMS_CONFIG:
-            MULTI_CLASSES_NMS: False
             NMS_TYPE: nms_gpu
             NMS_THRESH: 0.01
             NMS_PRE_MAXSIZE: 4096

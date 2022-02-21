@@ -2,101 +2,102 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from .target_assigner.anchor_generator import AnchorGenerator
-from .target_assigner.atss_target_assigner import ATSSTargetAssigner
-from .target_assigner.axis_aligned_target_assigner import AxisAlignedTargetAssigner
-from utils import box_coder_utils, common_utils, loss_utils
+from ops.iou3d_nms import iou3d_nms_utils
+from utils import box_coder_utils, common_utils, loss_utils, box_utils
 
 
-class AnchorHeadTemplate(nn.Module):
-    def __init__(self, model_cfg, num_class, class_names, grid_size, point_cloud_range, predict_boxes_when_training):
+class AnchorGenerator(object):
+    def __init__(self, anchor_generator_cfg, anchor_range):
+        super().__init__()
+        self.anchor_generator_cfg = anchor_generator_cfg
+        self.anchor_range = anchor_range
+        
+        self.anchor_sizes = [config['anchor_sizes'] for config in self.anchor_generator_cfg]
+        self.anchor_rotations = [config['anchor_rotations'] for config in self.anchor_generator_cfg]
+        self.anchor_heights = [config['anchor_bottom_heights'] for config in self.anchor_generator_cfg]
+        assert len(self.anchor_sizes) == len(self.anchor_rotations) == len(self.anchor_heights)
+        
+        self.anchor_class_names = [config['class_name'] for config in self.anchor_generator_cfg]
+        self.matched_thresholds = {}
+        self.unmatched_thresholds = {}
+        for config in self.anchor_generator_cfg:
+            self.matched_thresholds[config['class_name']] = config['matched_threshold']
+            self.unmatched_thresholds[config['class_name']] = config['unmatched_threshold']
+
+    def generate_anchors(self, grid_sizes):
+        all_anchors = []
+        num_anchors_per_location = []
+        for grid_size, anchor_size, anchor_rotation, anchor_height in zip(
+                grid_sizes, self.anchor_sizes, self.anchor_rotations, self.anchor_heights):
+
+            num_anchors_per_location.append(len(anchor_rotation) * len(anchor_size) * len(anchor_height))
+            x_stride = (self.anchor_range[3] - self.anchor_range[0]) / (grid_size[0] - 1)
+            y_stride = (self.anchor_range[4] - self.anchor_range[1]) / (grid_size[1] - 1)
+            x_offset, y_offset = 0, 0
+
+            x_shifts = torch.arange(
+                self.anchor_range[0] + x_offset, self.anchor_range[3] + 1e-5, step=x_stride, dtype=torch.float32,
+            ).cuda()
+            y_shifts = torch.arange(
+                self.anchor_range[1] + y_offset, self.anchor_range[4] + 1e-5, step=y_stride, dtype=torch.float32,
+            ).cuda()
+            z_shifts = x_shifts.new_tensor(anchor_height)
+
+            num_anchor_size, num_anchor_rotation = anchor_size.__len__(), anchor_rotation.__len__()
+            anchor_rotation = x_shifts.new_tensor(anchor_rotation)
+            anchor_size = x_shifts.new_tensor(anchor_size)
+            x_shifts, y_shifts, z_shifts = torch.meshgrid([
+                x_shifts, y_shifts, z_shifts
+            ])  # [x_grid, y_grid, z_grid]
+            anchors = torch.stack((x_shifts, y_shifts, z_shifts), dim=-1)  # [x, y, z, 3]
+            anchors = anchors[:, :, :, None, :].repeat(1, 1, 1, anchor_size.shape[0], 1)
+            anchor_size = anchor_size.view(1, 1, 1, -1, 3).repeat([*anchors.shape[0:3], 1, 1])
+            anchors = torch.cat((anchors, anchor_size), dim=-1)
+            anchors = anchors[:, :, :, :, None, :].repeat(1, 1, 1, 1, num_anchor_rotation, 1)
+            anchor_rotation = anchor_rotation.view(1, 1, 1, 1, -1, 1).repeat([*anchors.shape[0:3], num_anchor_size, 1, 1])
+            anchors = torch.cat((anchors, anchor_rotation), dim=-1) # [x, y, z, num_size, num_rot, 7]
+
+            anchors = anchors.permute(2, 1, 0, 3, 4, 5).contiguous() # [z, y, x, num_size, num_rot, 7]
+            anchors[..., 2] += anchors[..., 5] / 2  # shift to box centers
+            all_anchors.append(anchors)
+            
+        return all_anchors, num_anchors_per_location
+
+
+class AnchorHeadSingle(nn.Module):
+    def __init__(self, model_cfg, input_channels, num_class, class_names, grid_size, point_cloud_range):
         super().__init__()
         self.model_cfg = model_cfg
+        self.input_channels = input_channels
         self.num_class = num_class
-        self.class_names = class_names
-        self.predict_boxes_when_training = predict_boxes_when_training
-        self.use_multihead = self.model_cfg.get('USE_MULTIHEAD', False)
-
-        anchor_target_cfg = self.model_cfg.TARGET_ASSIGNER_CONFIG
-        self.box_coder = getattr(box_coder_utils, anchor_target_cfg.BOX_CODER)(
-            num_dir_bins=anchor_target_cfg.get('NUM_DIR_BINS', 6),
-            **anchor_target_cfg.get('BOX_CODER_CONFIG', {})
-        )
-
-        anchor_generator_cfg = self.model_cfg.ANCHOR_GENERATOR_CONFIG
-        anchors, self.num_anchors_per_location = self.generate_anchors(
-            anchor_generator_cfg, grid_size=grid_size, point_cloud_range=point_cloud_range,
-            anchor_ndim=self.box_coder.code_size
-        )
-        self.anchors = [x.cuda() for x in anchors]
-        self.target_assigner = self.get_target_assigner(anchor_target_cfg)
-
+        self.class_names = np.array(class_names)
+        
+        self.anchor_generator = AnchorGenerator(self.model_cfg.ANCHOR_GENERATOR_CONFIG, point_cloud_range)
+        self.anchor_class_names = self.anchor_generator.anchor_class_names
+        self.matched_thresholds = self.anchor_generator.matched_thresholds
+        self.unmatched_thresholds = self.anchor_generator.unmatched_thresholds
+        
+        feature_map_size = [grid_size[:2] // config['feature_map_stride'] for config in self.model_cfg.ANCHOR_GENERATOR_CONFIG]
+        all_anchors, num_anchors_per_location = self.anchor_generator.generate_anchors(feature_map_size)
+        self.anchors = [x.cuda() for x in all_anchors]
+        self.num_anchors_per_location = sum(num_anchors_per_location)
+        
+        self.box_coder = box_coder_utils.ResidualCoder(code_size=7)
+        
         self.forward_ret_dict = {}
-        self.build_losses(self.model_cfg.LOSS_CONFIG)
+        self.add_module('cls_loss_func', loss_utils.SigmoidFocalClassificationLoss(alpha=0.25, gamma=2.0))
+        self.add_module('reg_loss_func', loss_utils.WeightedSmoothL1Loss(code_weights=self.model_cfg.LOSS_CONFIG.LOSS_WEIGHTS['code_weights']))
+        self.add_module('dir_loss_func', loss_utils.WeightedCrossEntropyLoss())
+        
+        self.conv_cls = nn.Conv2d(input_channels, self.num_anchors_per_location * self.num_class, kernel_size=1)
+        self.conv_box = nn.Conv2d(input_channels, self.num_anchors_per_location * self.box_coder.code_size, kernel_size=1)
+        self.conv_dir_cls = nn.Conv2d(input_channels, self.num_anchors_per_location * self.model_cfg.NUM_DIR_BINS, kernel_size=1)
+        self.init_weights()
 
-    @staticmethod
-    def generate_anchors(anchor_generator_cfg, grid_size, point_cloud_range, anchor_ndim=7):
-        anchor_generator = AnchorGenerator(
-            anchor_range=point_cloud_range,
-            anchor_generator_config=anchor_generator_cfg
-        )
-        feature_map_size = [grid_size[:2] // config['feature_map_stride'] for config in anchor_generator_cfg]
-        anchors_list, num_anchors_per_location_list = anchor_generator.generate_anchors(feature_map_size)
-
-        if anchor_ndim != 7:
-            for idx, anchors in enumerate(anchors_list):
-                pad_zeros = anchors.new_zeros([*anchors.shape[0:-1], anchor_ndim - 7])
-                new_anchors = torch.cat((anchors, pad_zeros), dim=-1)
-                anchors_list[idx] = new_anchors
-
-        return anchors_list, num_anchors_per_location_list
-
-    def get_target_assigner(self, anchor_target_cfg):
-        if anchor_target_cfg.NAME == 'ATSS':
-            target_assigner = ATSSTargetAssigner(
-                topk=anchor_target_cfg.TOPK,
-                box_coder=self.box_coder,
-                use_multihead=self.use_multihead,
-                match_height=anchor_target_cfg.MATCH_HEIGHT
-            )
-        elif anchor_target_cfg.NAME == 'AxisAlignedTargetAssigner':
-            target_assigner = AxisAlignedTargetAssigner(
-                model_cfg=self.model_cfg,
-                class_names=self.class_names,
-                box_coder=self.box_coder,
-                match_height=anchor_target_cfg.MATCH_HEIGHT
-            )
-        else:
-            raise NotImplementedError
-        return target_assigner
-
-    def build_losses(self, losses_cfg):
-        self.add_module(
-            'cls_loss_func',
-            loss_utils.SigmoidFocalClassificationLoss(alpha=0.25, gamma=2.0)
-        )
-        reg_loss_name = 'WeightedSmoothL1Loss' if losses_cfg.get('REG_LOSS_TYPE', None) is None \
-            else losses_cfg.REG_LOSS_TYPE
-        self.add_module(
-            'reg_loss_func',
-            getattr(loss_utils, reg_loss_name)(code_weights=losses_cfg.LOSS_WEIGHTS['code_weights'])
-        )
-        self.add_module(
-            'dir_loss_func',
-            loss_utils.WeightedCrossEntropyLoss()
-        )
-
-    def assign_targets(self, gt_boxes):
-        """
-        Args:
-            gt_boxes: (B, M, 8)
-        Returns:
-
-        """
-        targets_dict = self.target_assigner.assign_targets(
-            self.anchors, gt_boxes
-        )
-        return targets_dict
+    def init_weights(self):
+        pi = 0.01
+        nn.init.constant_(self.conv_cls.bias, -np.log((1 - pi) / pi))
+        nn.init.normal_(self.conv_box.weight, mean=0, std=0.001)
 
     def get_cls_layer_loss(self):
         cls_preds = self.forward_ret_dict['cls_preds']
@@ -108,9 +109,6 @@ class AnchorHeadTemplate(nn.Module):
         negative_cls_weights = negatives * 1.0
         cls_weights = (negative_cls_weights + 1.0 * positives).float()
         reg_weights = positives.float()
-        if self.num_class == 1:
-            # class agnostic
-            box_cls_labels[positives] = 1
 
         pos_normalizer = positives.sum(1, keepdim=True).float()
         reg_weights /= torch.clamp(pos_normalizer, min=1.0)
@@ -132,6 +130,7 @@ class AnchorHeadTemplate(nn.Module):
         tb_dict = {
             'rpn_loss_cls': cls_loss.item()
         }
+        
         return cls_loss, tb_dict
 
     @staticmethod
@@ -141,6 +140,7 @@ class AnchorHeadTemplate(nn.Module):
         rad_tg_encoding = torch.cos(boxes1[..., dim:dim + 1]) * torch.sin(boxes2[..., dim:dim + 1])
         boxes1 = torch.cat([boxes1[..., :dim], rad_pred_encoding, boxes1[..., dim + 1:]], dim=-1)
         boxes2 = torch.cat([boxes2[..., :dim], rad_tg_encoding, boxes2[..., dim + 1:]], dim=-1)
+        
         return boxes1, boxes2
 
     @staticmethod
@@ -157,6 +157,7 @@ class AnchorHeadTemplate(nn.Module):
                                       device=dir_cls_targets.device)
             dir_targets.scatter_(-1, dir_cls_targets.unsqueeze(dim=-1).long(), 1.0)
             dir_cls_targets = dir_targets
+            
         return dir_cls_targets
 
     def get_box_reg_layer_loss(self):
@@ -171,20 +172,10 @@ class AnchorHeadTemplate(nn.Module):
         pos_normalizer = positives.sum(1, keepdim=True).float()
         reg_weights /= torch.clamp(pos_normalizer, min=1.0)
 
-        if isinstance(self.anchors, list):
-            if self.use_multihead:
-                anchors = torch.cat(
-                    [anchor.permute(3, 4, 0, 1, 2, 5).contiguous().view(-1, anchor.shape[-1]) for anchor in
-                     self.anchors], dim=0)
-            else:
-                anchors = torch.cat(self.anchors, dim=-3)
-        else:
-            anchors = self.anchors
+        anchors = torch.cat(self.anchors, dim=-3) # [z, y, x, num_size * 3, num_rot, 7]
         anchors = anchors.view(1, -1, anchors.shape[-1]).repeat(batch_size, 1, 1)
-        box_preds = box_preds.view(batch_size, -1,
-                                   box_preds.shape[-1] // self.num_anchors_per_location if not self.use_multihead else
-                                   box_preds.shape[-1])
-        # sin(a - b) = sinacosb-cosasinb
+        box_preds = box_preds.view(batch_size, -1, box_preds.shape[-1] // self.num_anchors_per_location)
+        # sin(a - b) = sinacosb - cosasinb
         box_preds_sin, reg_targets_sin = self.add_sin_difference(box_preds, box_reg_targets)
         loc_loss_src = self.reg_loss_func(box_preds_sin, reg_targets_sin, weights=reg_weights)  # [N, M]
         loc_loss = loc_loss_src.sum() / batch_size
@@ -218,11 +209,142 @@ class AnchorHeadTemplate(nn.Module):
         box_loss, tb_dict_box = self.get_box_reg_layer_loss()
         tb_dict.update(tb_dict_box)
         rpn_loss = cls_loss + box_loss
-
         tb_dict['rpn_loss'] = rpn_loss.item()
+        
         return rpn_loss, tb_dict
 
-    def generate_predicted_boxes(self, batch_size, cls_preds, box_preds, dir_cls_preds=None):
+    def assign_targets(self, all_anchors, gt_boxes_with_classes):
+        """
+        Args:
+            all_anchors: [(N, 7), ...]
+            gt_boxes: (B, M, 8)
+        Returns:
+
+        """
+
+        bbox_targets = []
+        cls_labels = []
+        reg_weights = []
+
+        batch_size = gt_boxes_with_classes.shape[0]
+        gt_classes = gt_boxes_with_classes[:, :, -1]
+        gt_boxes = gt_boxes_with_classes[:, :, :-1]
+        for k in range(batch_size):
+            cur_gt = gt_boxes[k]
+            cnt = cur_gt.__len__() - 1
+            while cnt > 0 and cur_gt[cnt].sum() == 0:
+                cnt -= 1
+            cur_gt = cur_gt[:cnt + 1]
+            cur_gt_classes = gt_classes[k][:cnt + 1].int()
+
+            target_list = []
+            for anchor_class_name, anchors in zip(self.anchor_class_names, all_anchors):
+                if cur_gt_classes.shape[0] > 1:
+                    mask = torch.from_numpy(self.class_names[cur_gt_classes.cpu() - 1] == anchor_class_name)
+                else:
+                    mask = torch.tensor([self.class_names[c - 1] == anchor_class_name for c in cur_gt_classes], dtype=torch.bool)
+
+                feature_map_size = anchors.shape[:3]
+                anchors = anchors.view(-1, anchors.shape[-1])
+                selected_classes = cur_gt_classes[mask]
+
+                single_target = self.assign_targets_single(
+                    anchors,
+                    cur_gt[mask],
+                    gt_classes=selected_classes,
+                    matched_threshold=self.matched_thresholds[anchor_class_name],
+                    unmatched_threshold=self.unmatched_thresholds[anchor_class_name]
+                )
+                target_list.append(single_target)
+
+            target_dict = {
+                'box_cls_labels': [t['box_cls_labels'].view(*feature_map_size, -1) for t in target_list],
+                'box_reg_targets': [t['box_reg_targets'].view(*feature_map_size, -1, self.box_coder.code_size) for t in target_list],
+                'reg_weights': [t['reg_weights'].view(*feature_map_size, -1) for t in target_list]
+            }
+            target_dict['box_reg_targets'] = torch.cat(
+                target_dict['box_reg_targets'], dim=-2
+            ).view(-1, self.box_coder.code_size)
+
+            target_dict['box_cls_labels'] = torch.cat(target_dict['box_cls_labels'], dim=-1).view(-1)
+            target_dict['reg_weights'] = torch.cat(target_dict['reg_weights'], dim=-1).view(-1)
+
+            bbox_targets.append(target_dict['box_reg_targets'])
+            cls_labels.append(target_dict['box_cls_labels'])
+            reg_weights.append(target_dict['reg_weights'])
+
+        bbox_targets = torch.stack(bbox_targets, dim=0)
+
+        cls_labels = torch.stack(cls_labels, dim=0)
+        reg_weights = torch.stack(reg_weights, dim=0)
+        all_targets_dict = {
+            'box_cls_labels': cls_labels,
+            'box_reg_targets': bbox_targets,
+            'reg_weights': reg_weights
+
+        }
+        
+        return all_targets_dict
+
+    def assign_targets_single(self, anchors, gt_boxes, gt_classes, matched_threshold=0.6, unmatched_threshold=0.45):
+        num_anchors = anchors.shape[0]
+        num_gt = gt_boxes.shape[0]
+
+        labels = torch.ones((num_anchors,), dtype=torch.int32, device=anchors.device) * -1
+        gt_ids = torch.ones((num_anchors,), dtype=torch.int32, device=anchors.device) * -1
+
+        if len(gt_boxes) > 0 and anchors.shape[0] > 0:
+            anchor_by_gt_overlap = box_utils.boxes3d_nearest_bev_iou(anchors[:, 0:7], gt_boxes[:, 0:7])
+
+            anchor_to_gt_argmax = torch.from_numpy(anchor_by_gt_overlap.cpu().numpy().argmax(axis=1)).cuda()
+            anchor_to_gt_max = anchor_by_gt_overlap[
+                torch.arange(num_anchors, device=anchors.device), anchor_to_gt_argmax
+            ]
+
+            gt_to_anchor_argmax = torch.from_numpy(anchor_by_gt_overlap.cpu().numpy().argmax(axis=0)).cuda()
+            gt_to_anchor_max = anchor_by_gt_overlap[gt_to_anchor_argmax, torch.arange(num_gt, device=anchors.device)]
+            empty_gt_mask = gt_to_anchor_max == 0
+            gt_to_anchor_max[empty_gt_mask] = -1
+
+            anchors_with_max_overlap = (anchor_by_gt_overlap == gt_to_anchor_max).nonzero()[:, 0]
+            gt_inds_force = anchor_to_gt_argmax[anchors_with_max_overlap]
+            labels[anchors_with_max_overlap] = gt_classes[gt_inds_force]
+            gt_ids[anchors_with_max_overlap] = gt_inds_force.int()
+
+            pos_inds = anchor_to_gt_max >= matched_threshold
+            gt_inds_over_thresh = anchor_to_gt_argmax[pos_inds]
+            labels[pos_inds] = gt_classes[gt_inds_over_thresh]
+            gt_ids[pos_inds] = gt_inds_over_thresh.int()
+            bg_inds = (anchor_to_gt_max < unmatched_threshold).nonzero()[:, 0]
+        else:
+            bg_inds = torch.arange(num_anchors, device=anchors.device)
+
+        fg_inds = (labels > 0).nonzero()[:, 0]
+
+        if len(gt_boxes) == 0 or anchors.shape[0] == 0:
+            labels[:] = 0
+        else:
+            labels[bg_inds] = 0
+            labels[anchors_with_max_overlap] = gt_classes[gt_inds_force]
+
+        bbox_targets = anchors.new_zeros((num_anchors, self.box_coder.code_size))
+        if len(gt_boxes) > 0 and anchors.shape[0] > 0:
+            fg_gt_boxes = gt_boxes[anchor_to_gt_argmax[fg_inds], :]
+            fg_anchors = anchors[fg_inds, :]
+            bbox_targets[fg_inds, :] = self.box_coder.encode_torch(fg_gt_boxes, fg_anchors)
+
+        reg_weights = anchors.new_zeros((num_anchors,))
+        reg_weights[labels > 0] = 1.0
+
+        ret_dict = {
+            'box_cls_labels': labels,
+            'box_reg_targets': bbox_targets,
+            'reg_weights': reg_weights,
+        }
+        
+        return ret_dict
+
+    def generate_predicted_boxes(self, batch_size, cls_preds, box_preds, dir_cls_preds):
         """
         Args:
             batch_size:
@@ -235,112 +357,45 @@ class AnchorHeadTemplate(nn.Module):
             batch_box_preds: (B, num_boxes, 7+C)
 
         """
-        if isinstance(self.anchors, list):
-            if self.use_multihead:
-                anchors = torch.cat([anchor.permute(3, 4, 0, 1, 2, 5).contiguous().view(-1, anchor.shape[-1])
-                                     for anchor in self.anchors], dim=0)
-            else:
-                anchors = torch.cat(self.anchors, dim=-3)
-        else:
-            anchors = self.anchors
+        anchors = torch.cat(self.anchors, dim=-3) # [z, y, x, num_size * 3, num_rot, 7]
         num_anchors = anchors.view(-1, anchors.shape[-1]).shape[0]
         batch_anchors = anchors.view(1, -1, anchors.shape[-1]).repeat(batch_size, 1, 1)
-        batch_cls_preds = cls_preds.view(batch_size, num_anchors, -1).float() \
-            if not isinstance(cls_preds, list) else cls_preds
-        batch_box_preds = box_preds.view(batch_size, num_anchors, -1) if not isinstance(box_preds, list) \
-            else torch.cat(box_preds, dim=1).view(batch_size, num_anchors, -1)
+        
+        batch_cls_preds = cls_preds.view(batch_size, num_anchors, -1).float()
+        
+        batch_box_preds = box_preds.view(batch_size, num_anchors, -1)
         batch_box_preds = self.box_coder.decode_torch(batch_box_preds, batch_anchors)
-
-        if dir_cls_preds is not None:
-            dir_offset = self.model_cfg.DIR_OFFSET
-            dir_limit_offset = self.model_cfg.DIR_LIMIT_OFFSET
-            dir_cls_preds = dir_cls_preds.view(batch_size, num_anchors, -1) if not isinstance(dir_cls_preds, list) \
-                else torch.cat(dir_cls_preds, dim=1).view(batch_size, num_anchors, -1)
-            dir_labels = torch.max(dir_cls_preds, dim=-1)[1]
-
-            period = (2 * np.pi / self.model_cfg.NUM_DIR_BINS)
-            dir_rot = common_utils.limit_period(
-                batch_box_preds[..., 6] - dir_offset, dir_limit_offset, period
-            )
-            batch_box_preds[..., 6] = dir_rot + dir_offset + period * dir_labels.to(batch_box_preds.dtype)
-
-        if isinstance(self.box_coder, box_coder_utils.PreviousResidualDecoder):
-            batch_box_preds[..., 6] = common_utils.limit_period(
-                -(batch_box_preds[..., 6] + np.pi / 2), offset=0.5, period=np.pi * 2
-            )
+        
+        dir_cls_preds = dir_cls_preds.view(batch_size, num_anchors, -1)
+        dir_labels = torch.max(dir_cls_preds, dim=-1)[1]
+        
+        period = (2 * np.pi / self.model_cfg.NUM_DIR_BINS)
+        rotation = common_utils.limit_period(batch_box_preds[..., 6] - self.model_cfg.DIR_OFFSET, self.model_cfg.DIR_LIMIT_OFFSET, period)
+        batch_box_preds[..., 6] = rotation + self.model_cfg.DIR_OFFSET + period * dir_labels.to(batch_box_preds.dtype)
 
         return batch_cls_preds, batch_box_preds
-
-    def forward(self, **kwargs):
-        raise NotImplementedError
-
-
-class AnchorHeadSingle(AnchorHeadTemplate):
-    def __init__(self, model_cfg, input_channels, num_class, class_names, grid_size, point_cloud_range,
-                 predict_boxes_when_training=True, **kwargs):
-        super().__init__(
-            model_cfg=model_cfg, num_class=num_class, class_names=class_names, grid_size=grid_size, point_cloud_range=point_cloud_range,
-            predict_boxes_when_training=predict_boxes_when_training
-        )
-
-        self.num_anchors_per_location = sum(self.num_anchors_per_location)
-
-        self.conv_cls = nn.Conv2d(
-            input_channels, self.num_anchors_per_location * self.num_class,
-            kernel_size=1
-        )
-        self.conv_box = nn.Conv2d(
-            input_channels, self.num_anchors_per_location * self.box_coder.code_size,
-            kernel_size=1
-        )
-
-        if self.model_cfg.get('USE_DIRECTION_CLASSIFIER', None) is not None:
-            self.conv_dir_cls = nn.Conv2d(
-                input_channels,
-                self.num_anchors_per_location * self.model_cfg.NUM_DIR_BINS,
-                kernel_size=1
-            )
-        else:
-            self.conv_dir_cls = None
-        self.init_weights()
-
-    def init_weights(self):
-        pi = 0.01
-        nn.init.constant_(self.conv_cls.bias, -np.log((1 - pi) / pi))
-        nn.init.normal_(self.conv_box.weight, mean=0, std=0.001)
 
     def forward(self, batch_dict):
         batch_bev_features = batch_dict['bev_features']
 
         cls_preds = self.conv_cls(batch_bev_features)
         box_preds = self.conv_box(batch_bev_features)
+        dir_cls_preds = self.conv_dir_cls(batch_bev_features)
 
-        cls_preds = cls_preds.permute(0, 2, 3, 1).contiguous()  # [N, H, W, C]
-        box_preds = box_preds.permute(0, 2, 3, 1).contiguous()  # [N, H, W, C]
+        cls_preds = cls_preds.permute(0, 2, 3, 1).contiguous() # [N, H, W, C1]
+        box_preds = box_preds.permute(0, 2, 3, 1).contiguous() # [N, H, W, C2]
+        dir_cls_preds = dir_cls_preds.permute(0, 2, 3, 1).contiguous() # [N, H, W, C3]
 
         self.forward_ret_dict['cls_preds'] = cls_preds
         self.forward_ret_dict['box_preds'] = box_preds
-
-        if self.conv_dir_cls is not None:
-            dir_cls_preds = self.conv_dir_cls(batch_bev_features)
-            dir_cls_preds = dir_cls_preds.permute(0, 2, 3, 1).contiguous()
-            self.forward_ret_dict['dir_cls_preds'] = dir_cls_preds
-        else:
-            dir_cls_preds = None
+        self.forward_ret_dict['dir_cls_preds'] = dir_cls_preds
 
         if self.training:
-            targets_dict = self.assign_targets(
-                gt_boxes=batch_dict['gt_boxes']
-            )
+            targets_dict = self.assign_targets(self.anchors, batch_dict['gt_boxes'])
             self.forward_ret_dict.update(targets_dict)
-
-        if not self.training or self.predict_boxes_when_training:
-            batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(
-                batch_size=batch_dict['batch_size'],
-                cls_preds=cls_preds, box_preds=box_preds, dir_cls_preds=dir_cls_preds
-            )
+        else:
+            batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(batch_dict['batch_size'], cls_preds, box_preds, dir_cls_preds)
             batch_dict['batch_cls_preds'] = batch_cls_preds
             batch_dict['batch_box_preds'] = batch_box_preds
-            batch_dict['cls_preds_normalized'] = False
 
         return batch_dict
