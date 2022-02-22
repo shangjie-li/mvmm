@@ -99,102 +99,6 @@ class MVMM(nn.Module):
         model_info_dict['module_list'].append(dense_head_module)
         return dense_head_module, model_info_dict
 
-    @staticmethod
-    def generate_recall_record(box_preds, recall_dict, batch_idx, data_dict=None, thresh_list=None):
-        if 'gt_boxes' not in data_dict:
-            return recall_dict
-
-        rois = data_dict['rois'][batch_idx] if 'rois' in data_dict else None
-        gt_boxes = data_dict['gt_boxes'][batch_idx]
-
-        if recall_dict.__len__() == 0:
-            recall_dict = {'gt': 0}
-            for cur_thresh in thresh_list:
-                recall_dict['roi_%s' % (str(cur_thresh))] = 0
-                recall_dict['rcnn_%s' % (str(cur_thresh))] = 0
-
-        cur_gt = gt_boxes
-        k = cur_gt.__len__() - 1
-        while k > 0 and cur_gt[k].sum() == 0:
-            k -= 1
-        cur_gt = cur_gt[:k + 1]
-
-        if cur_gt.shape[0] > 0:
-            if box_preds.shape[0] > 0:
-                iou3d_rcnn = iou3d_nms_utils.boxes_iou3d_gpu(box_preds[:, 0:7], cur_gt[:, 0:7])
-            else:
-                iou3d_rcnn = torch.zeros((0, cur_gt.shape[0]))
-
-            if rois is not None:
-                iou3d_roi = iou3d_nms_utils.boxes_iou3d_gpu(rois[:, 0:7], cur_gt[:, 0:7])
-
-            for cur_thresh in thresh_list:
-                if iou3d_rcnn.shape[0] == 0:
-                    recall_dict['rcnn_%s' % str(cur_thresh)] += 0
-                else:
-                    rcnn_recalled = (iou3d_rcnn.max(dim=0)[0] > cur_thresh).sum().item()
-                    recall_dict['rcnn_%s' % str(cur_thresh)] += rcnn_recalled
-                if rois is not None:
-                    roi_recalled = (iou3d_roi.max(dim=0)[0] > cur_thresh).sum().item()
-                    recall_dict['roi_%s' % str(cur_thresh)] += roi_recalled
-
-            recall_dict['gt'] += cur_gt.shape[0]
-        else:
-            gt_iou = box_preds.new_zeros(box_preds.shape[0])
-        return recall_dict
-
-    def post_processing(self, batch_dict):
-        """
-        Args:
-            batch_dict:
-                batch_size:
-                batch_cls_preds: (B, num_boxes, num_classes | 1) or (N1+N2+..., num_classes | 1)
-                                or [(B, num_boxes, num_class1), (B, num_boxes, num_class2) ...]
-                multihead_label_mapping: [(num_class1), (num_class2), ...]
-                batch_box_preds: (B, num_boxes, 7+C) or (N1+N2+..., 7+C)
-                has_class_labels: True/False
-                roi_labels: (B, num_rois)  1 .. num_classes
-                batch_pred_labels: (B, num_boxes, 1)
-        Returns:
-
-        """
-        batch_size = batch_dict['batch_size']
-        recall_dict = {}
-        pred_dicts = []
-        for batch_idx in range(batch_size):
-            box_preds = batch_dict['batch_box_preds'][batch_idx]
-            cls_preds = batch_dict['batch_cls_preds'][batch_idx]
-            
-            src_box_preds = box_preds
-            cls_preds = torch.sigmoid(cls_preds)
-            cls_preds, label_preds = torch.max(cls_preds, dim=-1)
-            label_preds += 1
-            
-            selected, selected_scores = model_nms_utils.class_agnostic_nms(
-                box_scores=cls_preds, box_preds=box_preds,
-                nms_config=self.model_cfg.POST_PROCESSING.NMS_CONFIG,
-                score_thresh=self.model_cfg.POST_PROCESSING.SCORE_THRESH
-            )
-            
-            final_boxes = box_preds[selected]
-            final_labels = label_preds[selected]
-            final_scores = selected_scores
-
-            recall_dict = self.generate_recall_record(
-                box_preds=final_boxes if 'rois' not in batch_dict else src_box_preds,
-                recall_dict=recall_dict, batch_idx=batch_idx, data_dict=batch_dict,
-                thresh_list=self.model_cfg.POST_PROCESSING.RECALL_THRESH_LIST
-            )
-
-            record_dict = {
-                'pred_boxes': final_boxes,
-                'pred_scores': final_scores,
-                'pred_labels': final_labels
-            }
-            pred_dicts.append(record_dict)
-
-        return pred_dicts, recall_dict
-
     def _load_state_dict(self, model_state_disk, *, strict=True):
         state_dict = self.state_dict()  # local cache of state_dict
 
@@ -278,27 +182,106 @@ class MVMM(nn.Module):
 
         return it, epoch
 
+    @staticmethod
+    def generate_recall_record(box_preds, recall_dict, batch_idx, data_dict=None, thresh_list=None):
+        if 'gt_boxes' not in data_dict:
+            return recall_dict
+
+        rois = data_dict['rois'][batch_idx] if 'rois' in data_dict else None
+        gt_boxes = data_dict['gt_boxes'][batch_idx]
+
+        if recall_dict.__len__() == 0:
+            recall_dict = {'gt': 0}
+            for cur_thresh in thresh_list:
+                recall_dict['roi_%s' % (str(cur_thresh))] = 0
+                recall_dict['rcnn_%s' % (str(cur_thresh))] = 0
+
+        cur_gt = gt_boxes
+        k = cur_gt.__len__() - 1
+        while k > 0 and cur_gt[k].sum() == 0:
+            k -= 1
+        cur_gt = cur_gt[:k + 1]
+
+        if cur_gt.shape[0] > 0:
+            if box_preds.shape[0] > 0:
+                iou3d_rcnn = iou3d_nms_utils.boxes_iou3d_gpu(box_preds[:, 0:7], cur_gt[:, 0:7])
+            else:
+                iou3d_rcnn = torch.zeros((0, cur_gt.shape[0]))
+
+            if rois is not None:
+                iou3d_roi = iou3d_nms_utils.boxes_iou3d_gpu(rois[:, 0:7], cur_gt[:, 0:7])
+
+            for cur_thresh in thresh_list:
+                if iou3d_rcnn.shape[0] == 0:
+                    recall_dict['rcnn_%s' % str(cur_thresh)] += 0
+                else:
+                    rcnn_recalled = (iou3d_rcnn.max(dim=0)[0] > cur_thresh).sum().item()
+                    recall_dict['rcnn_%s' % str(cur_thresh)] += rcnn_recalled
+                if rois is not None:
+                    roi_recalled = (iou3d_roi.max(dim=0)[0] > cur_thresh).sum().item()
+                    recall_dict['roi_%s' % str(cur_thresh)] += roi_recalled
+
+            recall_dict['gt'] += cur_gt.shape[0]
+        else:
+            gt_iou = box_preds.new_zeros(box_preds.shape[0])
+            
+        return recall_dict
+
     def forward(self, batch_dict):
         for cur_module in self.module_list:
             batch_dict = cur_module(batch_dict)
-
+        
         if self.training:
-            loss_rpn, tb_dict = self.dense_head.get_loss()
-            tb_dict = {
-                'loss_rpn': loss_rpn.item(),
-                **tb_dict
-            }
+            ret_dict, tb_dict, disp_dict = {}, {}, {}
             
-            loss = loss_rpn
-            ret_dict = {
-                'loss': loss
-            }
+            cls_loss = self.dense_head.get_cls_loss(batch_dict)
+            loc_loss, dir_loss = self.dense_head.get_box_loss(batch_dict)
             
-            disp_dict = {}
+            loss = cls_loss + loc_loss + dir_loss
+            ret_dict['loss'] = loss
+            
+            tb_dict['cls_loss'] = cls_loss.item()
+            tb_dict['loc_loss'] = loc_loss.item()
+            tb_dict['dir_loss'] = dir_loss.item()
+            tb_dict['loss'] = loss.item()
             return ret_dict, tb_dict, disp_dict
+            
         else:
-            pred_dicts, recall_dicts = self.post_processing(batch_dict)
-            return pred_dicts, recall_dicts
+            batch_size = batch_dict['batch_size']
+            pred_dicts = []
+            recall_dict = {}
+            
+            for batch_idx in range(batch_size):
+                box_preds = batch_dict['box_preds_for_testing'][batch_idx]
+                cls_preds = batch_dict['cls_preds_for_testing'][batch_idx]
+                
+                src_box_preds = box_preds
+                cls_preds = torch.sigmoid(cls_preds)
+                cls_preds, label_preds = torch.max(cls_preds, dim=-1)
+                label_preds += 1
+                
+                selected, selected_scores = model_nms_utils.class_agnostic_nms(
+                    box_scores=cls_preds, box_preds=box_preds,
+                    nms_config=self.model_cfg.POST_PROCESSING.NMS_CONFIG,
+                    score_thresh=self.model_cfg.POST_PROCESSING.SCORE_THRESH
+                )
+                
+                final_boxes = box_preds[selected]
+                final_labels = label_preds[selected]
+                final_scores = selected_scores
+                
+                pred_dicts.append({
+                    'pred_boxes': final_boxes,
+                    'pred_labels': final_labels,
+                    'pred_scores': final_scores,
+                })
+                
+                recall_dict = self.generate_recall_record(
+                    box_preds=final_boxes if 'rois' not in batch_dict else src_box_preds,
+                    recall_dict=recall_dict, batch_idx=batch_idx, data_dict=batch_dict,
+                    thresh_list=self.model_cfg.POST_PROCESSING.RECALL_THRESH_LIST
+                )
+            return pred_dicts, recall_dict
 
 
 def build_network(model_cfg, num_class, dataset):
