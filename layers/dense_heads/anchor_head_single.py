@@ -99,30 +99,24 @@ class AnchorHeadSingle(nn.Module):
         nn.init.normal_(self.conv_box.weight, mean=0, std=0.001)
 
     def get_cls_loss(self, batch_dict):
-        cls_preds = batch_dict['cls_preds_for_training']
-        cls_labels = batch_dict['cls_labels']
+        cls_preds = batch_dict['cls_preds_for_training'] # [B, H, W, num_anchors_per_location * num_class]
+        cls_labels = batch_dict['cls_labels'] # [B, num_anchors]
         
         batch_size = int(cls_preds.shape[0])
-        cared = cls_labels >= 0 # [N, num_anchors]
+        cared = cls_labels >= 0
         positives = cls_labels > 0
         negatives = cls_labels == 0
-        negative_cls_weights = negatives * 1.0
-        cls_weights = (negative_cls_weights + 1.0 * positives).float()
-        reg_weights = positives.float()
-
-        pos_normalizer = positives.sum(1, keepdim=True).float()
-        reg_weights /= torch.clamp(pos_normalizer, min=1.0)
-        cls_weights /= torch.clamp(pos_normalizer, min=1.0)
-        cls_targets = cls_labels * cared.type_as(cls_labels)
-        cls_targets = cls_targets.unsqueeze(dim=-1)
-
-        cls_targets = cls_targets.squeeze(dim=-1)
-        one_hot_targets = torch.zeros(*list(cls_targets.shape), self.num_class + 1, dtype=cls_preds.dtype, device=cls_targets.device)
-        one_hot_targets.scatter_(-1, cls_targets.unsqueeze(dim=-1).long(), 1.0)
-        cls_preds = cls_preds.view(batch_size, -1, self.num_class)
-        one_hot_targets = one_hot_targets[..., 1:]
+        cls_weights = (1.0 * positives + 1.0 * negatives).float()
+        cls_weights /= torch.clamp(positives.sum(1, keepdim=True).float(), min=1.0)
         
-        cls_loss_src = self.cls_loss_func(cls_preds, one_hot_targets, weights=cls_weights)  # [N, M]
+        cls_targets = cls_labels * cared.type_as(cls_labels) # [B, num_anchors]
+        cls_one_hot_targets = torch.zeros(*list(cls_targets.shape), self.num_class + 1, dtype=cls_targets.dtype, device=cls_targets.device)
+        cls_one_hot_targets.scatter_(dim=-1, index=cls_targets.unsqueeze(dim=-1).long(), value=1.0) # [B, num_anchors, num_class + 1]
+        
+        cls_preds = cls_preds.view(batch_size, -1, self.num_class) # [B, num_anchors, num_class]
+        cls_one_hot_targets = cls_one_hot_targets[..., 1:] # [B, num_anchors, num_class]
+        
+        cls_loss_src = self.cls_loss_func(cls_preds, cls_one_hot_targets, weights=cls_weights) # [B, num_anchors, num_class]
         cls_loss = cls_loss_src.sum() / batch_size
         cls_loss = cls_loss * self.model_cfg.LOSS_CONFIG.LOSS_WEIGHTS['cls_weight']
         
@@ -136,7 +130,7 @@ class AnchorHeadSingle(nn.Module):
             boxes2 = torch.cat([boxes2[..., :6], rad_gt_encoding, boxes2[..., 7:]], dim=-1)
             return boxes1, boxes2
         
-        def get_direction_target(anchors, reg_targets, dir_offset=0, num_bins=2):
+        def get_dir_target(anchors, reg_targets, dir_offset=0, num_bins=2):
             batch_size = reg_targets.shape[0]
             anchors = anchors.view(batch_size, -1, anchors.shape[-1])
             rot_gt = reg_targets[..., 6] + anchors[..., 6]
@@ -149,34 +143,35 @@ class AnchorHeadSingle(nn.Module):
             dir_cls_targets = dir_targets
             return dir_cls_targets
         
-        box_preds = batch_dict['box_preds_for_training']
-        dir_cls_preds = batch_dict['dir_cls_preds_for_training']
+        box_preds = batch_dict['box_preds_for_training'] # [B, H, W, num_anchors_per_location * 7]
+        dir_cls_preds = batch_dict['dir_cls_preds_for_training'] # [B, H, W, num_anchors_per_location * 2]
         
-        cls_labels = batch_dict['cls_labels']
-        box_targets = batch_dict['box_targets']
+        cls_labels = batch_dict['cls_labels'] # [B, num_anchors]
+        box_targets = batch_dict['box_targets'] # [B, num_anchors, 7]
         
         batch_size = int(box_preds.shape[0])
         positives = cls_labels > 0
-        reg_weights = positives.float()
-        pos_normalizer = positives.sum(1, keepdim=True).float()
-        reg_weights /= torch.clamp(pos_normalizer, min=1.0)
-
+        
+        loc_weights = positives.float()
+        loc_weights /= torch.clamp(positives.sum(1, keepdim=True).float(), min=1.0)
+        
+        dir_weights = positives.type_as(dir_cls_preds)
+        dir_weights /= torch.clamp(dir_weights.sum(-1, keepdim=True), min=1.0)
+        
         anchors = torch.cat(self.anchors, dim=-3) # [z, y, x, num_size * num_class, num_rot, 7]
         anchors = anchors.view(1, -1, anchors.shape[-1]).repeat(batch_size, 1, 1)
         
-        box_preds = box_preds.view(batch_size, -1, box_preds.shape[-1] // self.num_anchors_per_location)
+        box_preds = box_preds.view(batch_size, -1, box_preds.shape[-1] // self.num_anchors_per_location) # [B, num_anchors, 7]
         box_preds_sin, reg_targets_sin = add_sin_difference(box_preds, box_targets) # sin(a - b) = sinacosb - cosasinb
         
-        loc_loss_src = self.box_loss_func(box_preds_sin, reg_targets_sin, weights=reg_weights) # [N, M]
+        loc_loss_src = self.box_loss_func(box_preds_sin, reg_targets_sin, weights=loc_weights) # [B, num_anchors, 7]
         loc_loss = loc_loss_src.sum() / batch_size
         loc_loss = loc_loss * self.model_cfg.LOSS_CONFIG.LOSS_WEIGHTS['loc_weight']
-
-        dir_targets = get_direction_target(anchors, box_targets, self.model_cfg.DIR_OFFSET, self.model_cfg.NUM_DIR_BINS)
-        dir_logits = dir_cls_preds.view(batch_size, -1, self.model_cfg.NUM_DIR_BINS)
-        weights = positives.type_as(dir_logits)
-        weights /= torch.clamp(weights.sum(-1, keepdim=True), min=1.0)
         
-        dir_loss_src = self.dir_cls_loss_func(dir_logits, dir_targets, weights=weights)
+        dir_cls_preds = dir_cls_preds.view(batch_size, -1, self.model_cfg.NUM_DIR_BINS) # [B, num_anchors, 2]
+        dir_cls_one_hot_targets = get_dir_target(anchors, box_targets, self.model_cfg.DIR_OFFSET, self.model_cfg.NUM_DIR_BINS) # [B, num_anchors, 2]
+        
+        dir_loss_src = self.dir_cls_loss_func(dir_cls_preds, dir_cls_one_hot_targets, weights=dir_weights) # [B, num_anchors]
         dir_loss = dir_loss_src.sum() / batch_size
         dir_loss = dir_loss * self.model_cfg.LOSS_CONFIG.LOSS_WEIGHTS['dir_weight']
 
@@ -284,8 +279,8 @@ class AnchorHeadSingle(nn.Module):
                 all_cls_labels.append(temp_cls_labels)
                 all_box_targets.append(temp_box_targets)
             
-            batch_dict['cls_labels'] = torch.stack(all_cls_labels, dim=0) # [B, num_anchors * num_class]
-            batch_dict['box_targets'] = torch.stack(all_box_targets, dim=0) # [B, num_anchors * num_class, 7]
+            batch_dict['cls_labels'] = torch.stack(all_cls_labels, dim=0) # [B, num_anchors]
+            batch_dict['box_targets'] = torch.stack(all_box_targets, dim=0) # [B, num_anchors, 7]
             
             batch_dict['cls_preds_for_training'] = cls_preds # [B, H, W, C1]
             batch_dict['box_preds_for_training'] = box_preds # [B, H, W, C2]
