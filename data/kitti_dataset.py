@@ -4,6 +4,7 @@ from skimage import io
 from collections import defaultdict
 from pathlib import Path
 
+import torch
 import numpy as np
 import torch.utils.data as torch_data
 
@@ -514,13 +515,32 @@ class KittiDataset(torch_data.Dataset):
             data_dict['gt_boxes'] = data_dict['gt_boxes'][mask]
 
         if self.training:
-            shuffle_idx = np.random.permutation(data_dict['colored_points'].shape[0])
-            data_dict['colored_points'] = data_dict['colored_points'][shuffle_idx]
-            
             if len(data_dict['gt_boxes']) == 0:
                 new_index = np.random.randint(self.__len__())
                 return self.__getitem__(new_index)
-
+            
+            colored_points = data_dict['colored_points']
+            gt_boxes = data_dict['gt_boxes']
+            obj_points_list = []
+            obj_labels_list = []
+            point_indices = roiaware_pool3d_utils.points_in_boxes_cpu(
+                torch.from_numpy(colored_points[:, 0:3]), torch.from_numpy(gt_boxes[:, :7])
+            ).numpy()  # (nboxes, npoints)
+            for i in range(gt_boxes.shape[0]):
+                obj_points = colored_points[point_indices[i] > 0]
+                obj_labels = np.ones((obj_points.shape[0])).astype(np.int32) * int(gt_boxes[i, 7])
+                obj_points_list.append(obj_points)
+                obj_labels_list.append(obj_labels)
+            
+            background_points = box_utils.remove_points_in_boxes3d(colored_points, gt_boxes[:, :7])
+            bkg_labels = np.zeros((background_points.shape[0])).astype(np.int32)
+            colored_points = np.concatenate([background_points, np.concatenate(obj_points_list, axis=0)], axis=0)
+            point_labels = np.concatenate([bkg_labels, np.concatenate(obj_labels_list, axis=0)], axis=0)
+            
+            shuffle_idx = np.random.permutation(colored_points.shape[0])
+            data_dict['colored_points'] = colored_points[shuffle_idx] # (N, 7)
+            data_dict['point_labels'] = point_labels[shuffle_idx] # (N)
+        
         # For ablation study
         xs = data_dict['colored_points'][:, 0:1]
         ys = data_dict['colored_points'][:, 1:2]

@@ -302,6 +302,6 @@ class AnchorHeadSingle(nn.Module):
             box_preds[..., 6] = rotation + self.model_cfg.DIR_OFFSET + period * dir_cls_labels.to(box_preds.dtype)
             
             batch_dict['cls_preds_for_testing'] = cls_preds # [B, num_boxes, num_classes]
-            batch_dict['box_preds_for_testing'] = box_preds # [B, num_boxes, 7 + C]
+            batch_dict['box_preds_for_testing'] = box_preds # [B, num_boxes, 7]
 
         return batch_dict

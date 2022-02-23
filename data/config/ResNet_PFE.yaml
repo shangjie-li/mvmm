@@ -50,6 +50,11 @@ MODEL:
         FRONT_SIZE_OF_RANGE_IMAGE: [48, 512]
         LIDAR_FOV_UP: 2
         LIDAR_FOV_DOWN: 24.8
+        
+        LOSS_CONFIG:
+            LOSS_WEIGHTS: {
+                'seg_weight': 1.0,
+            }
 
     PV_BRIDGE:
         NAME: PFE

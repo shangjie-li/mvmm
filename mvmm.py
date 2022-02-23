@@ -234,12 +234,14 @@ class MVMM(nn.Module):
         if self.training:
             ret_dict, tb_dict, disp_dict = {}, {}, {}
             
+            seg_loss = self.rv_backbone.get_seg_loss(batch_dict)
             cls_loss = self.dense_head.get_cls_loss(batch_dict)
             loc_loss, dir_loss = self.dense_head.get_box_loss(batch_dict)
             
-            loss = cls_loss + loc_loss + dir_loss
+            loss = seg_loss + cls_loss + loc_loss + dir_loss
             ret_dict['loss'] = loss
             
+            tb_dict['seg_loss'] = seg_loss.item()
             tb_dict['cls_loss'] = cls_loss.item()
             tb_dict['loc_loss'] = loc_loss.item()
             tb_dict['dir_loss'] = dir_loss.item()
@@ -252,8 +254,8 @@ class MVMM(nn.Module):
             recall_dict = {}
             
             for batch_idx in range(batch_size):
-                box_preds = batch_dict['box_preds_for_testing'][batch_idx]
-                cls_preds = batch_dict['cls_preds_for_testing'][batch_idx]
+                box_preds = batch_dict['box_preds_for_testing'][batch_idx] # [num_boxes, 7]
+                cls_preds = batch_dict['cls_preds_for_testing'][batch_idx] # [num_boxes, num_classes]
                 
                 src_box_preds = box_preds
                 cls_preds = torch.sigmoid(cls_preds)
