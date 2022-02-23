@@ -3,9 +3,7 @@ import glob
 from pathlib import Path
 import time
 import copy
-import matplotlib.pyplot as plt
 
-import open3d
 from utils import open3d_vis_utils as V
 
 import numpy as np
@@ -18,7 +16,7 @@ from utils import common_utils
 
 def parse_config():
     parser = argparse.ArgumentParser(description='arg parser')
-    parser.add_argument('--cfg_file', type=str, default='data/config.yaml',
+    parser.add_argument('--cfg_file', type=str, default='data/config/ResNet_PFE.yaml',
         help='specify the config for training')
     parser.add_argument('--training', action='store_true', default=False,
         help='whether to use training mode')
@@ -58,20 +56,22 @@ if __name__ == '__main__':
                 print(val)
         print()
         
-        if dataset.used_feature_list == ['x', 'y', 'z', 'intensity', 'r', 'g', 'b']:
+        if set(['r', 'g', 'b']).issubset(set(dataset.used_feature_list)):
             V.draw_scenes(
-                points=data_dict['colored_points'].reshape(-1, 7),
-                ref_boxes=data_dict['gt_boxes'].reshape(-1, 8)[:, :7],
+                points=data_dict['colored_points'][:, 0:3],
+                ref_boxes=data_dict['gt_boxes'][:, :7],
                 ref_scores=None,
-                ref_labels=data_dict['gt_boxes'].reshape(-1, 8)[:, 7].astype(np.int),
-                point_colors=data_dict['colored_points'].reshape(-1, 7)[:, -3:]
+                ref_labels=data_dict['gt_boxes'][:, 7].astype(np.int),
+                point_colors=data_dict['colored_points'][:, -3:],
+                point_size=4.0
             )
         else:
             V.draw_scenes(
-                points=data_dict['colored_points'].reshape(-1, 7),
-                ref_boxes=data_dict['gt_boxes'].reshape(-1, 8)[:, :7],
+                points=data_dict['colored_points'][:, 0:3],
+                ref_boxes=data_dict['gt_boxes'][:, :7],
                 ref_scores=None,
-                ref_labels=data_dict['gt_boxes'].reshape(-1, 8)[:, 7].astype(np.int),
-                point_colors=np.ones((data_dict['colored_points'].reshape(-1, 7).shape[0], 3))
+                ref_labels=data_dict['gt_boxes'][:, 7].astype(np.int),
+                point_colors=np.ones((data_dict['colored_points'].shape[0], 3)),
+                point_size=1.0
             )
         

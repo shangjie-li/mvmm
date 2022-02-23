@@ -1,5 +1,6 @@
 CLASS_NAMES: ['Car', 'Pedestrian', 'Cyclist']
 
+
 DATA_CONFIG: 
     DATASET: 'KittiDataset'
     DATA_PATH: 'data/kitti'
@@ -17,7 +18,7 @@ DATA_CONFIG:
     
     GET_ITEM_LIST: ['colored_points']
     SRC_FEATURE_LIST: ['x', 'y', 'z', 'intensity', 'r', 'g', 'b']
-    USED_FEATURE_LIST: ['x', 'y', 'z', 'range', 'intensity']
+    USED_FEATURE_LIST: ['r', 'g', 'b']
     
     DATA_AUGMENTOR:
         - NAME: gt_sampling
@@ -38,16 +39,6 @@ DATA_CONFIG:
         
         - NAME: random_world_scaling
           WORLD_SCALE_RANGE: [0.95, 1.05]
-    
-    DATA_PROCESSOR:
-        - NAME: mask_points_and_boxes_outside_range
-          REMOVE_OUTSIDE_BOXES: True
-
-        - NAME: shuffle_points
-          SHUFFLE_ENABLED: {
-            'train': True,
-            'test': False
-          }
 
 
 MODEL:

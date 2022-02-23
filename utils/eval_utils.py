@@ -5,7 +5,6 @@ import numpy as np
 import torch
 import tqdm
 
-import open3d
 from . import open3d_vis_utils as V
 
 from . import common_utils
@@ -59,21 +58,23 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
         with torch.no_grad():
             pred_dicts, ret_dict = model(batch_dict)
             if display:
-                if dataset.used_feature_list == ['x', 'y', 'z', 'intensity', 'r', 'g', 'b']:
+                if set(['r', 'g', 'b']).issubset(set(dataset.used_feature_list)):
                     V.draw_scenes(
-                        points=batch_dict['colored_points'][:, 1:].cpu().numpy(),
+                        points=batch_dict['colored_points'][:, 1:4].cpu().numpy(),
                         ref_boxes=pred_dicts[0]['pred_boxes'],
                         ref_scores=pred_dicts[0]['pred_scores'],
                         ref_labels=pred_dicts[0]['pred_labels'],
-                        point_colors=batch_dict['colored_points'][:, -3:].cpu().numpy()
+                        point_colors=batch_dict['colored_points'][:, -3:].cpu().numpy(),
+                        point_size=4.0
                     )
                 else:
                     V.draw_scenes(
-                        points=batch_dict['colored_points'][:, 1:].cpu().numpy(),
+                        points=batch_dict['colored_points'][:, 1:4].cpu().numpy(),
                         ref_boxes=pred_dicts[0]['pred_boxes'],
                         ref_scores=pred_dicts[0]['pred_scores'],
                         ref_labels=pred_dicts[0]['pred_labels'],
-                        point_colors=np.ones((batch_dict['colored_points'].shape[0], 3))
+                        point_colors=np.ones((batch_dict['colored_points'].shape[0], 3)),
+                        point_size=1.0
                     )
     
         disp_dict = {}

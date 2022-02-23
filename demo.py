@@ -4,7 +4,6 @@ from pathlib import Path
 import time
 import os
 
-import open3d
 from utils import open3d_vis_utils as V
 
 import numpy as np
@@ -44,7 +43,7 @@ class DemoDataset(KittiDataset):
 
 def parse_config():
     parser = argparse.ArgumentParser(description='arg parser')
-    parser.add_argument('--cfg_file', type=str, default='data/config.yaml',
+    parser.add_argument('--cfg_file', type=str, default='data/config/ResNet_PFE.yaml',
                         help='specify the config for demo')
     parser.add_argument('--data_path', type=str, default='data/kitti/training/velodyne/000008.bin',
                         help='specify the point cloud data file or directory')
@@ -121,21 +120,23 @@ def main():
                     print(val)
             print()
 
-            if demo_dataset.used_feature_list == ['x', 'y', 'z', 'intensity', 'r', 'g', 'b']:
+            if set(['r', 'g', 'b']).issubset(set(demo_dataset.used_feature_list)):
                 V.draw_scenes(
-                    points=data_dict['colored_points'][:, 1:].cpu().numpy(),
+                    points=data_dict['colored_points'][:, 1:4].cpu().numpy(),
                     ref_boxes=pred_dicts[0]['pred_boxes'],
                     ref_scores=pred_dicts[0]['pred_scores'],
                     ref_labels=pred_dicts[0]['pred_labels'],
-                    point_colors=data_dict['colored_points'][:, -3:].cpu().numpy()
+                    point_colors=data_dict['colored_points'][:, -3:].cpu().numpy(),
+                    point_size=4.0
                 )
             else:
                 V.draw_scenes(
-                    points=data_dict['colored_points'][:, 1:].cpu().numpy(),
+                    points=data_dict['colored_points'][:, 1:4].cpu().numpy(),
                     ref_boxes=pred_dicts[0]['pred_boxes'],
                     ref_scores=pred_dicts[0]['pred_scores'],
                     ref_labels=pred_dicts[0]['pred_labels'],
-                    point_colors=np.ones((data_dict['colored_points'].shape[0], 3))
+                    point_colors=np.ones((data_dict['colored_points'].shape[0], 3)),
+                    point_size=1.0
                 )
                 
             print('Time cost per batch: %s' % (round((time_end - time_start) / 10, 3)))

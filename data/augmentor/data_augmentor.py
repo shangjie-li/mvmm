@@ -86,6 +86,9 @@ class DataAugmentor(object):
                 gt_boxes: (M', 7), [x, y, z, l, w, h, heading] in lidar coordinate system
                 road_plane: (4), [a, b, c, d]
                 colored_points: (N', 7), Points of (x, y, z, intensity, r, g, b)
+                random_world_flip_along_x: bool
+                random_world_rotation: float
+                random_world_scaling: float
                 ...
 
         """

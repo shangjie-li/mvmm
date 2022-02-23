@@ -19,11 +19,7 @@ Implementation of MVMM in PyTorch for KITTI 3D Object Detetcion
    ```
  - Install spconv
    ```
-   # Try the command below:
    pip install spconv-cu102
-   
-   # If there is `ERROR: Cannot uninstall 'certifi'.`, try:
-   pip install spconv-cu102 --ignore-installed
    ```
  - Compile external modules
    ```
@@ -34,11 +30,6 @@ Implementation of MVMM in PyTorch for KITTI 3D Object Detetcion
    ```
    pip install mayavi
    pip install pyqt5
-   
-   # If you want import opencv, run:
-   pip install opencv-python
-   
-   # If you want import open3d, run:
    pip install open3d-python
    ```
 
@@ -62,7 +53,7 @@ Implementation of MVMM in PyTorch for KITTI 3D Object Detetcion
    ```
    # This will create gt_database dir and info files in mvmm/data/kitti.
    cd mvmm
-   python -m data.kitti_dataset create_kitti_infos data/config.yaml
+   python -m data.kitti_dataset create_kitti_infos data/config/ResNet_PFE.yaml
    ```
  - Display the dataset
    ```
@@ -92,5 +83,9 @@ Implementation of MVMM in PyTorch for KITTI 3D Object Detetcion
 ## Evaluation
  - Run the command below to evaluate
    ```
+   # Run on the dataset
    python test.py --ckpt=path_to_your_ckpt
+   
+   # Run on the dataset and display
+   python test.py --ckpt=path_to_your_ckpt --display
    ```
