@@ -128,23 +128,16 @@ class ResNet(nn.Module):
         self.num_rv_features = self.num_class + 1
         self.conv_3x3 = nn.Conv2d(self.decoder.output_channels, self.num_rv_features, kernel_size=3, stride=1, padding=1, bias=False)
         
-        self.add_module('seg_loss_func', loss_utils.SigmoidFocalClassificationLoss(alpha=0.25, gamma=2.0))
+        self.add_module('seg_loss_func', nn.NLLLoss())
     
     def get_seg_loss(self, batch_dict):
         seg_preds = batch_dict['rv_features'] # (N1 + N2 + ..., input_channels)
         seg_labels = batch_dict['point_labels'] # (N1 + N2 + ...), int
         
         batch_size = batch_dict['batch_size']
-        positives = seg_labels > 0
-        negatives = seg_labels == 0
-        seg_weights = (1.0 * positives + 1.0 * negatives).float()
-        seg_weights /= torch.clamp(positives.sum(0, keepdim=True).float(), min=1.0)
         
-        seg_one_hot_targets = torch.zeros(*list(seg_labels.shape), self.num_class + 1, dtype=seg_labels.dtype, device=seg_labels.device)
-        seg_one_hot_targets.scatter_(dim=-1, index=seg_labels.unsqueeze(dim=-1).long(), value=1.0) # (N1 + N2 + ..., num_class + 1)
-        
-        seg_loss_src = self.seg_loss_func(seg_preds, seg_one_hot_targets, weights=seg_weights) # (N1 + N2 + ..., num_class + 1)
-        seg_loss = seg_loss_src.sum() / batch_size
+        seg_loss_src = self.seg_loss_func(torch.log(seg_preds), seg_labels.long())
+        seg_loss = seg_loss_src / batch_size
         seg_loss = seg_loss * self.model_cfg.LOSS_CONFIG.LOSS_WEIGHTS['seg_weight']
         
         return seg_loss
@@ -214,7 +207,7 @@ class ResNet(nn.Module):
             range_image = batch_range_images[batch_idx, ...]
             
             # ~ import matplotlib.pyplot as plt
-            # ~ plt.imshow(range_image[3:4, :, :].detach().permute(1, 2, 0).cpu().numpy())
+            # ~ plt.imshow(range_image[0:1, :, :].detach().permute(1, 2, 0).cpu().numpy())
             # ~ plt.show()
             
             full_range_image = torch.zeros(
