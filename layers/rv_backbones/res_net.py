@@ -136,7 +136,7 @@ class ResNet(nn.Module):
         
         batch_size = batch_dict['batch_size']
         
-        seg_loss_src = self.seg_loss_func(torch.log(seg_preds), seg_labels.long())
+        seg_loss_src = self.seg_loss_func(torch.log(seg_preds.clamp(min=1e-8)), seg_labels.long())
         seg_loss = seg_loss_src / batch_size
         seg_loss = seg_loss * self.model_cfg.LOSS_CONFIG.LOSS_WEIGHTS['seg_weight']
         
