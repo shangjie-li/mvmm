@@ -64,7 +64,6 @@ MODEL:
             'test': 40000
         }
         MAX_POINTS_PER_PILLAR: 32
-        USE_ABSOLUTE_XYZ: True
         USE_RELATIVE_XYZ_TO_CLUSTER: True
         USE_RELATIVE_XYZ_TO_CENTER: True
         FILTERS: [64]

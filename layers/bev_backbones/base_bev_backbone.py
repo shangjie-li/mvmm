@@ -81,7 +81,7 @@ class BaseBEVBackbone(nn.Module):
         self.num_bev_features = c_in
     
     def forward(self, batch_dict, **kwargs):
-        batch_pv_features = batch_dict['pv_features']
+        batch_pv_features = batch_dict['pv_features'] # (B, input_channels, ny, nx)
         
         batch_bev_features = []
         x = batch_pv_features

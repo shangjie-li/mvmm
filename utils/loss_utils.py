@@ -202,7 +202,10 @@ class WeightedCrossEntropyLoss(nn.Module):
         """
         input = input.permute(0, 2, 1)
         target = target.argmax(dim=-1)
-        loss = F.cross_entropy(input, target, reduction='none') * weights
+        if weights is not None:
+            loss = F.cross_entropy(input, target, reduction='none') * weights
+        else:
+            loss = F.cross_entropy(input, target, reduction='none')
         return loss
 
 
