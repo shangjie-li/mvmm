@@ -94,9 +94,6 @@ class AnchorHeadSingle(nn.Module):
         self.conv_box = nn.Conv2d(input_channels, self.num_anchors_per_location * self.box_coder.code_size, kernel_size=1)
         self.conv_dir_cls = nn.Conv2d(input_channels, self.num_anchors_per_location * self.model_cfg.NUM_DIR_BINS, kernel_size=1)
         
-        # ~ stride = self.model_cfg.ANCHOR_GENERATOR_CONFIG[0]['feature_map_stride']
-        # ~ self.conv_3x3 = nn.Conv2d(self.num_class, self.num_anchors_per_location * self.num_class, kernel_size=3, stride=stride)
-        
         self.init_weights()
 
     def init_weights(self):
@@ -161,8 +158,8 @@ class AnchorHeadSingle(nn.Module):
         loc_weights = positives.float() # loc_weights consider positives only
         loc_weights /= torch.clamp(positives.sum(1, keepdim=True).float(), min=1.0)
         
-        dir_weights = positives.type_as(dir_cls_preds) # dir_weights consider positives only
-        dir_weights /= torch.clamp(dir_weights.sum(-1, keepdim=True), min=1.0)
+        dir_weights = positives.float() # dir_weights consider positives only
+        dir_weights /= torch.clamp(positives.sum(1, keepdim=True).float(), min=1.0)
         
         anchors = torch.cat(self.anchors, dim=-3)
         anchors = anchors.view(1, -1, anchors.shape[-1]).repeat(batch_size, 1, 1)
@@ -238,7 +235,7 @@ class AnchorHeadSingle(nn.Module):
     def forward(self, batch_dict):
         batch_bev_features = batch_dict['bev_features']
         batch_size = batch_dict['batch_size']
-
+        
         cls_preds = self.conv_cls(batch_bev_features)
         box_preds = self.conv_box(batch_bev_features)
         dir_cls_preds = self.conv_dir_cls(batch_bev_features)
@@ -246,7 +243,7 @@ class AnchorHeadSingle(nn.Module):
         cls_preds = cls_preds.permute(0, 2, 3, 1).contiguous() # (B, H, W, C1), C1 is 6 * 3 by default
         box_preds = box_preds.permute(0, 2, 3, 1).contiguous() # (B, H, W, C2), C2 is 6 * 7 by default
         dir_cls_preds = dir_cls_preds.permute(0, 2, 3, 1).contiguous() # (B, H, W, C3), C3 is 6 * 2 by default
-
+        
         if self.training:
             all_cls_labels = []
             all_box_targets = []
