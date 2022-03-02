@@ -47,13 +47,12 @@ class PFE(nn.Module):
         self.extra_channels += 3 if self.model_cfg.USE_RELATIVE_XYZ_TO_CENTER else 0
         
         assert len(self.model_cfg.FILTERS) > 0
-        filters = self.model_cfg.FILTERS
+        self.filters = self.model_cfg.FILTERS
         
-        filters = [self.base_channels + self.extra_channels] + list(filters)
-        self.pfn_layers = PFNLayer(filters[0], filters[1])
+        self.pfn_layers = PFNLayer(self.base_channels + self.extra_channels, self.filters[-1])
         
-        self.num_pv_features = filters[-1]
-        self.num_pv_seg_features = self.input_channels - 1
+        self.num_class = self.input_channels - 1
+        self.num_pv_features = self.filters[-1] + self.num_class
     
     def forward(self, batch_dict, **kwargs):
         batch_points = batch_dict['colored_points'] # (N1 + N2 + ..., 8), Points of (batch_id, x, y, z, intensity, r, g, b)
@@ -62,7 +61,7 @@ class PFE(nn.Module):
         self.pillar_generator = PointToVoxel(
             vsize_xyz=self.model_cfg.PILLAR_SIZE,
             coors_range_xyz=self.point_cloud_range,
-            num_point_features=self.base_channels + self.input_channels,
+            num_point_features=self.base_channels + self.num_class,
             max_num_voxels=self.model_cfg.MAX_NUMBER_OF_PILLARS[self.mode],
             max_num_points_per_voxel=self.model_cfg.MAX_POINTS_PER_PILLAR,
             device=batch_points.device
@@ -77,7 +76,9 @@ class PFE(nn.Module):
             this_points = batch_points[batch_mask, :] # (Ni, 8), Points of (batch_id, x, y, z, intensity, r, g, b)
             rv_features = batch_rv_features[batch_mask, :] # (Ni, input_channels)
             
-            # pillars: (num_pillars, max_points_per_pillar, base_channels + input_channels)
+            rv_features = torch.softmax(rv_features, dim=-1)[:, 1:] # (Ni, num_class)
+            
+            # pillars: (num_pillars, max_points_per_pillar, base_channels + num_class)
             # coords: (num_pillars, 3), Location of pillars, [zi, yi, xi], zi should be 0
             # num_points_per_pillar: (num_pillars), Number of points in each pillar
             pillars, coords, num_points_per_pillar = self.pillar_generator(torch.cat([this_points[:, 1:5], rv_features], dim=-1))
@@ -107,7 +108,7 @@ class PFE(nn.Module):
         batch_coords = torch.cat(batch_coords, dim=0)
         
         batch_pv_features = self.pfn_layers(batch_pv_features)
-        batch_pv_seg_features = torch.mean(batch_pv_seg_features, dim=1, keepdim=False)[:, 1:]
+        batch_pv_seg_features = torch.max(batch_pv_seg_features, dim=1, keepdim=False)[0]
         
         batch_bev_features = []
         batch_bev_seg_features = []
@@ -119,12 +120,12 @@ class PFE(nn.Module):
             pv_seg_features = batch_pv_seg_features[batch_mask, :]
             
             bev_features = torch.zeros(
-                (self.num_pv_features, self.nz * self.ny * self.nx),
+                (self.filters[-1], self.nz * self.ny * self.nx),
                 dtype=pv_features.dtype,
                 device=pv_features.device
             )
             bev_seg_features = torch.zeros(
-                (self.num_pv_seg_features, self.nz * self.ny * self.nx),
+                (self.num_class, self.nz * self.ny * self.nx),
                 dtype=pv_seg_features.dtype,
                 device=pv_seg_features.device
             )
@@ -133,15 +134,32 @@ class PFE(nn.Module):
             bev_features[:, indices] = pv_features.t()
             bev_seg_features[:, indices] = pv_seg_features.t()
             
+            # ~ import matplotlib.pyplot as plt
+            # ~ import time
+            # ~ fig = plt.figure(figsize=(16, 8))
+            # ~ fig.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.95, wspace=0.05, hspace=0.05)
+            # ~ for i in range(0, 3):
+                # ~ img = bev_seg_features[i:i + 1, :].view(self.nz, self.ny, self.nx).permute(1, 2, 0).cpu().numpy()
+                # ~ img = img[::-1, :, :] # y -> -y
+                # ~ plt.subplot(1, 3, i + 1)
+                # ~ plt.imshow(img)
+                # ~ plt.axis('off')
+            # ~ plt.show()
+            # ~ fig.savefig(time.asctime(time.localtime(time.time())), dpi=200)
+            
             batch_bev_features.append(bev_features)
             batch_bev_seg_features.append(bev_seg_features)
         
         batch_bev_features = torch.stack(batch_bev_features, dim=0)
         batch_bev_seg_features = torch.stack(batch_bev_seg_features, dim=0)
         
-        batch_dict['pv_features'] = batch_bev_features.view(
-            batch_size, self.num_pv_features * self.nz, self.ny, self.nx) # (B, num_pv_features, ny, nx)
-        batch_dict['pv_seg_features'] = batch_bev_seg_features.view(
-            batch_size, self.num_pv_seg_features * self.nz, self.ny, self.nx) # (B, num_pv_seg_features, ny, nx)
+        batch_bev_features = batch_bev_features.view(
+            batch_size, self.filters[-1] * self.nz, self.ny, self.nx) # (B, num_pv_features, ny, nx)
+        batch_bev_seg_features = batch_bev_seg_features.view(
+            batch_size, self.num_class * self.nz, self.ny, self.nx) # (B, num_class, ny, nx)
+        
+        batch_bev_features = torch.cat([batch_bev_features, batch_bev_seg_features], dim=1)
+        batch_dict['pv_features'] = batch_bev_features # (B, num_pv_features, ny, nx)
         
         return batch_dict
+    

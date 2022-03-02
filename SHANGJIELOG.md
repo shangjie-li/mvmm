@@ -31,7 +31,7 @@
 
  * The 3D AP with 11 Recall Positions (R11) is used to evaluate the models. The latency is tested on a single 1080Ti GPU.
 
-| ID | RV backbone                        | PV bridge           | Car              | Pedestrian       | Cyclist          | Latency |
+| ID | RV                                 | PV                  | Car              | Pedestrian       | Cyclist          | Latency |
 |:--:|:----------------------------------:|:-------------------:|:----------------:|:----------------:|:----------------:|:-------:|
 | 10 | xyzi -> DRB(4, 64)                 | PFE(64, 64)         | 57.4, 49.3, 44.6 | 29.6, 24.4, 20.1 | 47.1, 29.1, 27.9 | -       |
 | 11 | xyzi -> DRB(4, 64)                 | xyz -> PFE(67, 64)  | 69.4, 55.0, 53.8 | 30.8, 28.7, 24.6 | 44.5, 30.8, 27.3 | -       |
@@ -84,7 +84,7 @@
 
  * The 3D AP with 11 Recall Positions (R11) is used to evaluate the models. The latency is tested on a single 1080Ti GPU.
 
-| ID | RV backbone               | PV bridge   | Sampling       | Car              | Pedestrian       | Cyclist          | Latency |
+| ID | RV                        | PV          | Sampling       | Car              | Pedestrian       | Cyclist          | Latency |
 |:--:|:-------------------------:|:-----------:|:--------------:|:----------------:|:----------------:|:----------------:|:-------:|
 | 51 | xyzri(nm) -> DRNet        | PFE(13, 64) | 3*5, ROP, COP  | 87.5, 76.5, 75.7 | 52.8, 47.2, 44.8 | 78.8, 59.6, 56.5 | -       |
 | 52 | rgb(nm) -> DRNet          | PFE(13, 64) | 3*5, ROP, COP  | 87.9, 76.9, 75.7 | 54.9, 48.4, 46.0 | 74.9, 55.9, 53.2 | -       |
@@ -98,4 +98,27 @@
 | 60 | rgb(nm) -> ResNet         | PFE(13, 64) | 3*5, ROP, COP  | 87.5, 77.0, 75.8 | 56.2, 50.9, 47.9 | 78.2, 57.9, 55.9 | -       |
 
 
+## Ablation Experiments of pv bridges for MVMM
+
+ * The 3D AP with 11 Recall Positions (R11) is used to evaluate the models. The latency is tested on a single 1080Ti GPU.
+
+| ID | RV     | PV                                  | BEV       | Car              | Pedestrian       | Cyclist          | Latency |
+|:--:|:------:|:-----------------------------------:|:---------:|:----------------:|:----------------:|:----------------:|:-------:|
+| 61 | ResNet | PFE(10, 64)                         | SSD(64)   | 86.7, 76.2, 74.9 | 55.6, 50.6, 47.8 | 77.0, 56.5, 54.5 | -       |
+| 62 | ResNet | seg -> PFE(13, 64)                  | SSD(64)   | 86.0, 75.3, 73.1 | 43.1, 40.1, 38.5 | 67.3, 52.2, 49.6 | -       |
+| 63 | ResNet | seg(si) -> PFE(13, 64)              | SSD(64)   | 87.9, 76.5, 74.5 | 45.8, 41.4, 39.4 | 68.8, 52.5, 50.8 | -       |
+| 64 | ResNet | seg(sm) -> PFE(13, 64)              | SSD(64)   | 87.7, 76.3, 73.6 | 40.1, 36.3, 34.6 | 64.8, 49.8, 47.9 | -       |
+| 65 | ResNet | seg(am) -> PFE(11, 64)              | SSD(64)   | -                | -                | -                | -       |
+| 66 | ResNet | PFE(10, 64), seg -> PFE(3, 64)      | SSD(64)   | 87.0, 76.5, 74.3 | 46.0, 42.6, 40.1 | 71.1, 54.0, 51.2 | -       |
+| 67 | ResNet | PFE(10, 64), seg(si) -> PFE(3, 64)  | SSD(64)   | 87.0, 76.4, 73.9 | 42.1, 39.1, 37.3 | 64.8, 48.6, 46.8 | -       |
+| 68 | ResNet | PFE(10, 64), seg(sm) -> PFE(3, 64)  | SSD(64)   | 87.7, 76.7, 74.1 | 41.2, 38.5, 37.0 | 67.3, 51.6, 49.4 | -       |
+| 69 | ResNet | seg -> PFE(3, 64)                   | SSD(64)   | 65.5, 51.6, 50.4 | 30.7, 26.8, 24.7 | 45.6, 31.3, 29.9 | -       |
+| 70 | ResNet | seg(sm) -> PFE(3, 64)               | SSD(64)   | 60.9, 48.5, 45.9 | 28.3, 25.6, 23.5 | 38.9, 27.1, 25.4 | -       |
+| 71 | ResNet | seg -> 3*64 -> 64                   | SSD(64)   | 87.2, 76.1, 74.0 | 48.3, 43.9, 40.4 | 73.3, 55.5, 53.1 | -       |
+| 72 | ResNet | seg(sm) -> 3*64 -> 64               | SSD(64)   | 87.4, 76.0, 73.5 | 49.6, 43.5, 39.9 | 71.6, 51.8, 49.8 | -       |
+| 73 | ResNet | PFE(10, 64)+seg -> 67 -> 64         | SSD(64)   | 87.2, 76.1, 74.3 | 36.8, 34.0, 33.4 | 65.9, 50.9, 48.6 | -       |
+| 74 | ResNet | PFE(10, 64)+seg(sm) -> 67 -> 64     | SSD(64)   | 87.2, 76.2, 74.1 | 38.3, 35.8, 34.4 | 65.0, 49.9, 47.4 | -       |
+| 75 | ResNet | PFE(10, 64), seg(sm)                | Dual(+)   |
+| 76 | ResNet | PFE(10, 64), seg(sm)                | Dual(1x1) |
+| 77 | ResNet | PFE(10, 64), seg(sm)                | Dual(af)  |
 
