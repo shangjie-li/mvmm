@@ -154,7 +154,7 @@ class PFE(nn.Module):
         batch_bev_seg_features = torch.stack(batch_bev_seg_features, dim=0)
         
         batch_bev_features = batch_bev_features.view(
-            batch_size, self.filters[-1] * self.nz, self.ny, self.nx) # (B, num_pv_features, ny, nx)
+            batch_size, self.filters[-1] * self.nz, self.ny, self.nx) # (B, filters, ny, nx)
         batch_bev_seg_features = batch_bev_seg_features.view(
             batch_size, self.num_class * self.nz, self.ny, self.nx) # (B, num_class, ny, nx)
         
