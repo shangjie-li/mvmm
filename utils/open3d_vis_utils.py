@@ -37,13 +37,15 @@ def get_coor_colors(obj_labels):
     return label_rgba
 
 
-def draw_scenes(points, gt_boxes=None, ref_boxes=None, ref_labels=None, ref_scores=None, point_colors=None, point_size=1.0):
+def draw_scenes(points, gt_boxes=None, ref_boxes=None, ref_labels=None, ref_scores=None, point_labels=None, point_colors=None, point_size=1.0):
     if isinstance(points, torch.Tensor):
         points = points.cpu().numpy()
     if isinstance(gt_boxes, torch.Tensor):
         gt_boxes = gt_boxes.cpu().numpy()
     if isinstance(ref_boxes, torch.Tensor):
         ref_boxes = ref_boxes.cpu().numpy()
+    if isinstance(point_labels, torch.Tensor):
+        point_labels = point_labels.cpu().numpy()
 
     vis = open3d.visualization.Visualizer()
     vis.create_window()
@@ -55,9 +57,11 @@ def draw_scenes(points, gt_boxes=None, ref_boxes=None, ref_labels=None, ref_scor
     pts.points = open3d.utility.Vector3dVector(points[:, :3])
 
     vis.add_geometry(pts)
-    if point_colors is None:
+    if point_labels is None and point_colors is None:
         pts.colors = open3d.utility.Vector3dVector(np.ones((points.shape[0], 3)))
-    else:
+    elif point_labels is not None:
+        pts.colors = open3d.utility.Vector3dVector(np.array(box_colormap)[point_labels])
+    elif point_colors is not None:
         pts.colors = open3d.utility.Vector3dVector(point_colors)
 
     if gt_boxes is not None:

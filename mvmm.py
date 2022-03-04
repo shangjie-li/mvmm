@@ -183,48 +183,40 @@ class MVMM(nn.Module):
         return it, epoch
 
     @staticmethod
-    def generate_recall_record(box_preds, recall_dict, batch_idx, data_dict=None, thresh_list=None):
-        if 'gt_boxes' not in data_dict:
-            return recall_dict
-
-        rois = data_dict['rois'][batch_idx] if 'rois' in data_dict else None
-        gt_boxes = data_dict['gt_boxes'][batch_idx]
-
-        if recall_dict.__len__() == 0:
-            recall_dict = {'gt': 0}
-            for cur_thresh in thresh_list:
-                recall_dict['roi_%s' % (str(cur_thresh))] = 0
-                recall_dict['rcnn_%s' % (str(cur_thresh))] = 0
-
+    def generate_recall_record(box_preds, gt_boxes, thresh_list, seg_preds, point_labels):
+        recall_dict = {'gt': 0}
+        for cur_thresh in thresh_list:
+            recall_dict['roi_%s' % (str(cur_thresh))] = 0
+            recall_dict['rcnn_%s' % (str(cur_thresh))] = 0
+        
         cur_gt = gt_boxes
         k = cur_gt.__len__() - 1
         while k > 0 and cur_gt[k].sum() == 0:
             k -= 1
         cur_gt = cur_gt[:k + 1]
-
+        
         if cur_gt.shape[0] > 0:
+            recall_dict['gt'] += cur_gt.shape[0]
             if box_preds.shape[0] > 0:
                 iou3d_rcnn = iou3d_nms_utils.boxes_iou3d_gpu(box_preds[:, 0:7], cur_gt[:, 0:7])
             else:
                 iou3d_rcnn = torch.zeros((0, cur_gt.shape[0]))
-
-            if rois is not None:
-                iou3d_roi = iou3d_nms_utils.boxes_iou3d_gpu(rois[:, 0:7], cur_gt[:, 0:7])
-
             for cur_thresh in thresh_list:
                 if iou3d_rcnn.shape[0] == 0:
                     recall_dict['rcnn_%s' % str(cur_thresh)] += 0
                 else:
-                    rcnn_recalled = (iou3d_rcnn.max(dim=0)[0] > cur_thresh).sum().item()
-                    recall_dict['rcnn_%s' % str(cur_thresh)] += rcnn_recalled
-                if rois is not None:
-                    roi_recalled = (iou3d_roi.max(dim=0)[0] > cur_thresh).sum().item()
-                    recall_dict['roi_%s' % str(cur_thresh)] += roi_recalled
-
-            recall_dict['gt'] += cur_gt.shape[0]
-        else:
-            gt_iou = box_preds.new_zeros(box_preds.shape[0])
-            
+                    recall_dict['rcnn_%s' % str(cur_thresh)] += (iou3d_rcnn.max(dim=0)[0] > cur_thresh).sum().item()
+        
+        recall_dict['seg_ious'] = []
+        num_class = seg_preds.shape[1] - 1
+        seg_label_preds = torch.max(torch.sigmoid(seg_preds), dim=-1)[1]
+        for idx in range(num_class):
+            label = idx + 1
+            intersection_mask = (seg_label_preds == label) & (point_labels == label)
+            union_mask = (seg_label_preds == label) | (point_labels == label)
+            iou = intersection_mask.sum().item() / max(union_mask.sum().item(), 1)
+            recall_dict['seg_ious'].append(iou)
+        
         return recall_dict
 
     def forward(self, batch_dict):
@@ -246,43 +238,57 @@ class MVMM(nn.Module):
             tb_dict['loc_loss'] = loc_loss.item()
             tb_dict['dir_loss'] = dir_loss.item()
             tb_dict['loss'] = loss.item()
+            
             return ret_dict, tb_dict, disp_dict
             
         else:
             batch_size = batch_dict['batch_size']
             pred_dicts = []
-            recall_dict = {}
             
             for batch_idx in range(batch_size):
-                box_preds = batch_dict['box_preds_for_testing'][batch_idx] # [num_boxes, 7]
-                cls_preds = batch_dict['cls_preds_for_testing'][batch_idx] # [num_boxes, num_classes]
+                box_preds = batch_dict['box_preds_for_testing'][batch_idx] # (num_boxes, 7)
+                cls_preds = batch_dict['cls_preds_for_testing'][batch_idx] # (num_boxes, num_class)
                 
-                src_box_preds = box_preds
-                cls_preds = torch.sigmoid(cls_preds)
-                cls_preds, label_preds = torch.max(cls_preds, dim=-1)
+                score_preds, label_preds = torch.max(torch.sigmoid(cls_preds), dim=-1)
                 label_preds += 1
                 
                 selected, selected_scores = model_nms_utils.class_agnostic_nms(
-                    box_scores=cls_preds, box_preds=box_preds,
+                    box_scores=score_preds, box_preds=box_preds,
                     nms_config=self.model_cfg.POST_PROCESSING.NMS_CONFIG,
                     score_thresh=self.model_cfg.POST_PROCESSING.SCORE_THRESH
                 )
                 
-                final_boxes = box_preds[selected]
-                final_labels = label_preds[selected]
-                final_scores = selected_scores
+                box_preds = box_preds[selected]
+                label_preds = label_preds[selected]
+                score_preds = selected_scores
+                
+                batch_points = batch_dict['colored_points'] # (N1 + N2 + ..., 8), Points of (batch_id, x, y, z, intensity, r, g, b)
+                batch_mask = batch_points[:, 0] == batch_idx
+                seg_preds = batch_dict['seg_preds_for_testing'][batch_mask, :] # (Ni, num_class + 1)
+                
+                seg_score_preds, seg_label_preds = torch.max(torch.sigmoid(seg_preds), dim=-1)
                 
                 pred_dicts.append({
-                    'pred_boxes': final_boxes,
-                    'pred_labels': final_labels,
-                    'pred_scores': final_scores,
+                    'pred_boxes': box_preds,
+                    'pred_labels': label_preds,
+                    'pred_scores': score_preds,
+                    'pred_seg_labels': seg_label_preds,
+                    'pred_seg_scores': seg_score_preds,
                 })
                 
-                recall_dict = self.generate_recall_record(
-                    box_preds=final_boxes if 'rois' not in batch_dict else src_box_preds,
-                    recall_dict=recall_dict, batch_idx=batch_idx, data_dict=batch_dict,
-                    thresh_list=self.model_cfg.POST_PROCESSING.RECALL_THRESH_LIST
-                )
+                if 'gt_boxes' not in batch_dict:
+                    recall_dict = {}
+                else:
+                    gt_boxes = batch_dict['gt_boxes'][batch_idx]
+                    point_labels = batch_dict['point_labels'][batch_mask]
+                    recall_dict = self.generate_recall_record(
+                        box_preds=box_preds,
+                        gt_boxes=gt_boxes,
+                        thresh_list=self.model_cfg.POST_PROCESSING.RECALL_THRESH_LIST,
+                        seg_preds=seg_preds,
+                        point_labels=point_labels
+                    )
+                
             return pred_dicts, recall_dict
 
 

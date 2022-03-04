@@ -424,6 +424,7 @@ class KittiDataset(torch_data.Dataset):
                 random_world_scaling: float
                 point_features: (N', used_point_features)
                 point_labels: (N'), int
+                point_frequencies: (N'), float
                 image: optional, (H, W, 3), RGB Image
         """
         if self._merge_all_iters_to_one_epoch:
@@ -490,6 +491,7 @@ class KittiDataset(torch_data.Dataset):
                 random_world_scaling: float
                 point_features: (N', used_point_features)
                 point_labels: (N'), int
+                point_frequencies: (N'), float
                 image: optional, (H, W, 3), RGB Image
         """
         data_dict = self.data_augmentor.forward(data_dict=data_dict) if self.data_augmentor is not None else data_dict
@@ -513,33 +515,46 @@ class KittiDataset(torch_data.Dataset):
             # Mask boxes outside range
             mask = box_utils.mask_boxes_outside_range_numpy(data_dict['gt_boxes'], self.point_cloud_range)
             data_dict['gt_boxes'] = data_dict['gt_boxes'][mask]
-
+            
+            colored_points = data_dict['colored_points']
+            gt_boxes = data_dict['gt_boxes']
+            
+            if gt_boxes.shape[0] > 0:
+                obj_points_list = []
+                obj_labels_list = []
+                obj_frequencies_list = []
+                point_indices = roiaware_pool3d_utils.points_in_boxes_cpu(
+                    torch.from_numpy(colored_points[:, 0:3]), torch.from_numpy(gt_boxes[:, :7])
+                ).numpy()  # (nboxes, npoints)
+                for i in range(gt_boxes.shape[0]):
+                    obj_points = colored_points[point_indices[i] > 0]
+                    obj_labels = np.ones((obj_points.shape[0])).astype(np.int32) * int(gt_boxes[i, 7])
+                    obj_frequencies = np.ones((obj_points.shape[0])) * obj_points.shape[0]
+                    obj_points_list.append(obj_points)
+                    obj_labels_list.append(obj_labels)
+                    obj_frequencies_list.append(obj_frequencies)
+                
+                background_points = box_utils.remove_points_in_boxes3d(colored_points, gt_boxes[:, :7])
+                bkg_labels = np.zeros((background_points.shape[0])).astype(np.int32)
+                bkg_frequencies = np.ones((background_points.shape[0])) * background_points.shape[0]
+                data_dict['colored_points'] = np.concatenate([background_points, np.concatenate(obj_points_list, axis=0)], axis=0)
+                data_dict['point_labels'] = np.concatenate([bkg_labels, np.concatenate(obj_labels_list, axis=0)], axis=0)
+                data_dict['point_frequencies'] = np.concatenate([bkg_frequencies, np.concatenate(obj_frequencies_list, axis=0)], axis=0)
+            
+            else:
+                data_dict['colored_points'] = colored_points
+                data_dict['point_labels'] = np.zeros((colored_points.shape[0])).astype(np.int32)
+                data_dict['point_frequencies'] = np.ones((colored_points.shape[0])) * colored_points.shape[0]
+        
         if self.training:
             if len(data_dict['gt_boxes']) == 0:
                 new_index = np.random.randint(self.__len__())
                 return self.__getitem__(new_index)
             
-            colored_points = data_dict['colored_points']
-            gt_boxes = data_dict['gt_boxes']
-            obj_points_list = []
-            obj_labels_list = []
-            point_indices = roiaware_pool3d_utils.points_in_boxes_cpu(
-                torch.from_numpy(colored_points[:, 0:3]), torch.from_numpy(gt_boxes[:, :7])
-            ).numpy()  # (nboxes, npoints)
-            for i in range(gt_boxes.shape[0]):
-                obj_points = colored_points[point_indices[i] > 0]
-                obj_labels = np.ones((obj_points.shape[0])).astype(np.int32) * int(gt_boxes[i, 7])
-                obj_points_list.append(obj_points)
-                obj_labels_list.append(obj_labels)
-            
-            background_points = box_utils.remove_points_in_boxes3d(colored_points, gt_boxes[:, :7])
-            bkg_labels = np.zeros((background_points.shape[0])).astype(np.int32)
-            colored_points = np.concatenate([background_points, np.concatenate(obj_points_list, axis=0)], axis=0)
-            point_labels = np.concatenate([bkg_labels, np.concatenate(obj_labels_list, axis=0)], axis=0)
-            
-            shuffle_idx = np.random.permutation(colored_points.shape[0])
-            data_dict['colored_points'] = colored_points[shuffle_idx] # (N, 7)
-            data_dict['point_labels'] = point_labels[shuffle_idx] # (N)
+            shuffle_idx = np.random.permutation(data_dict['colored_points'].shape[0])
+            data_dict['colored_points'] = data_dict['colored_points'][shuffle_idx] # (N, 7)
+            data_dict['point_labels'] = data_dict['point_labels'][shuffle_idx] # (N)
+            data_dict['point_frequencies'] = data_dict['point_frequencies'][shuffle_idx] # (N)
         
         # For ablation study
         xs = data_dict['colored_points'][:, 0:1]
@@ -591,6 +606,7 @@ class KittiDataset(torch_data.Dataset):
                 random_world_scaling: (batch_size), float
                 point_features: (N1 + N2 + ..., used_point_features)
                 point_labels: (N1 + N2 + ...), int
+                point_frequencies: (N1 + N2 + ...), float
                 image: optional, (batch_size, H_max, W_max, 3), RGB Image
         """
         data_dict = defaultdict(list)
@@ -603,7 +619,7 @@ class KittiDataset(torch_data.Dataset):
 
         for key, val in data_dict.items():
             try:
-                if key in ['point_features', 'point_labels']:
+                if key in ['point_features', 'point_labels', 'point_frequencies']:
                     ret[key] = np.concatenate(val, axis=0)
                 elif key in ['colored_points']:
                     coors = []

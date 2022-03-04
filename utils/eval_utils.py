@@ -38,6 +38,9 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
     dataset = dataloader.dataset
     class_names = dataset.class_names
     det_annos = []
+    seg_iou_dict = {}
+    for name in class_names:
+        seg_iou_dict[name] = []
 
     logger.info('*************** EPOCH %s EVALUATION *****************' % epoch_id)
     if dist_test:
@@ -58,24 +61,33 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
         with torch.no_grad():
             pred_dicts, ret_dict = model(batch_dict)
             if display:
-                if set(['r', 'g', 'b']).issubset(set(dataset.used_feature_list)):
-                    V.draw_scenes(
-                        points=batch_dict['colored_points'][:, 1:4].cpu().numpy(),
-                        ref_boxes=pred_dicts[0]['pred_boxes'],
-                        ref_scores=pred_dicts[0]['pred_scores'],
-                        ref_labels=pred_dicts[0]['pred_labels'],
-                        point_colors=batch_dict['colored_points'][:, -3:].cpu().numpy(),
-                        point_size=4.0
-                    )
-                else:
-                    V.draw_scenes(
-                        points=batch_dict['colored_points'][:, 1:4].cpu().numpy(),
-                        ref_boxes=pred_dicts[0]['pred_boxes'],
-                        ref_scores=pred_dicts[0]['pred_scores'],
-                        ref_labels=pred_dicts[0]['pred_labels'],
-                        point_colors=np.ones((batch_dict['colored_points'].shape[0], 3)),
-                        point_size=1.0
-                    )
+                # ~ if set(['r', 'g', 'b']).issubset(set(dataset.used_feature_list)):
+                    # ~ V.draw_scenes(
+                        # ~ points=batch_dict['colored_points'][:, 1:4].cpu().numpy(),
+                        # ~ ref_boxes=pred_dicts[0]['pred_boxes'],
+                        # ~ ref_scores=pred_dicts[0]['pred_scores'],
+                        # ~ ref_labels=pred_dicts[0]['pred_labels'],
+                        # ~ point_colors=batch_dict['colored_points'][:, -3:].cpu().numpy(),
+                        # ~ point_size=4.0
+                    # ~ )
+                # ~ else:
+                    # ~ V.draw_scenes(
+                        # ~ points=batch_dict['colored_points'][:, 1:4].cpu().numpy(),
+                        # ~ ref_boxes=pred_dicts[0]['pred_boxes'],
+                        # ~ ref_scores=pred_dicts[0]['pred_scores'],
+                        # ~ ref_labels=pred_dicts[0]['pred_labels'],
+                        # ~ point_colors=np.ones((batch_dict['colored_points'].shape[0], 3)),
+                        # ~ point_size=2.0
+                    # ~ )
+                
+                V.draw_scenes(
+                    points=batch_dict['colored_points'][:, 1:4].cpu().numpy(),
+                    ref_boxes=pred_dicts[0]['pred_boxes'],
+                    ref_scores=pred_dicts[0]['pred_scores'],
+                    ref_labels=pred_dicts[0]['pred_labels'],
+                    point_labels=pred_dicts[0]['pred_seg_labels'],
+                    point_size=2.0
+                )
     
         disp_dict = {}
 
@@ -85,6 +97,9 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
             output_path=final_output_dir if save_to_file else None
         )
         det_annos += annos
+        for idx, name in enumerate(class_names):
+            seg_iou_dict[name].append(ret_dict['seg_ious'][idx])
+        
         if cfg.LOCAL_RANK == 0:
             progress_bar.set_postfix(disp_dict)
             progress_bar.update()
@@ -137,6 +152,13 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
 
     logger.info(result_str)
     ret_dict.update(result_dict)
+    
+    seg_miou = []
+    for name in class_names:
+        seg_iou_dict[name] = np.mean(seg_iou_dict[name])
+        seg_miou.append(seg_iou_dict[name])
+        logger.info('seg_iou_%s: %f' % (name, seg_iou_dict[name]))
+    logger.info('seg_miou: %f' % np.mean(seg_miou))
 
     logger.info('Result is save to %s' % result_dir)
     logger.info('****************Evaluation done.*****************')

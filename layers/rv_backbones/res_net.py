@@ -130,14 +130,15 @@ class ResNet(nn.Module):
         self.add_module('seg_loss_func', loss_utils.WeightedCrossEntropyLoss())
     
     def get_seg_loss(self, batch_dict):
-        seg_preds = batch_dict['rv_features'].unsqueeze(0) # (1, N1 + N2 + ..., input_channels), float
+        seg_preds = batch_dict['seg_preds_for_training'].unsqueeze(0) # (1, N1 + N2 + ..., input_channels), float
         seg_labels = batch_dict['point_labels'].unsqueeze(0) # (1, N1 + N2 + ...), int
+        seg_frequencies = batch_dict['point_frequencies'].unsqueeze(0) # (1, N1 + N2 + ...), float
         
         batch_size = batch_dict['batch_size']
         positives = seg_labels > 0
         negatives = seg_labels == 0
         seg_weights = (1.0 * positives + 1.0 * negatives).float() # seg_weights consider both positives and negatives
-        seg_weights /= torch.clamp(positives.sum(1, keepdim=True).float(), min=1.0)
+        seg_weights /= torch.log(seg_frequencies + 1)
         
         seg_one_hot_targets = torch.zeros(*list(seg_labels.shape), self.num_class + 1, dtype=seg_labels.dtype, device=seg_labels.device)
         seg_one_hot_targets.scatter_(dim=-1, index=seg_labels.unsqueeze(dim=-1).long(), value=1.0) # (1, N1 + N2 + ..., input_channels)
@@ -241,6 +242,13 @@ class ResNet(nn.Module):
             batch_rv_features.append(rv_features)
         
         batch_rv_features = torch.cat(batch_rv_features, dim=0)
+        
         batch_dict['rv_features'] = batch_rv_features # (N1 + N2 + ..., num_rv_features)
+        
+        if self.training:
+            batch_dict['seg_preds_for_training'] = batch_rv_features # (N1 + N2 + ..., num_rv_features)
+            
+        else:
+            batch_dict['seg_preds_for_testing'] = batch_rv_features # (N1 + N2 + ..., num_rv_features)
         
         return batch_dict

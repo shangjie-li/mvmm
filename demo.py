@@ -120,25 +120,34 @@ def main():
                     print(val)
             print()
 
-            if set(['r', 'g', 'b']).issubset(set(demo_dataset.used_feature_list)):
-                V.draw_scenes(
-                    points=data_dict['colored_points'][:, 1:4].cpu().numpy(),
-                    ref_boxes=pred_dicts[0]['pred_boxes'],
-                    ref_scores=pred_dicts[0]['pred_scores'],
-                    ref_labels=pred_dicts[0]['pred_labels'],
-                    point_colors=data_dict['colored_points'][:, -3:].cpu().numpy(),
-                    point_size=4.0
-                )
-            else:
-                V.draw_scenes(
-                    points=data_dict['colored_points'][:, 1:4].cpu().numpy(),
-                    ref_boxes=pred_dicts[0]['pred_boxes'],
-                    ref_scores=pred_dicts[0]['pred_scores'],
-                    ref_labels=pred_dicts[0]['pred_labels'],
-                    point_colors=np.ones((data_dict['colored_points'].shape[0], 3)),
-                    point_size=1.0
-                )
-                
+            # ~ if set(['r', 'g', 'b']).issubset(set(demo_dataset.used_feature_list)):
+                # ~ V.draw_scenes(
+                    # ~ points=data_dict['colored_points'][:, 1:4].cpu().numpy(),
+                    # ~ ref_boxes=pred_dicts[0]['pred_boxes'],
+                    # ~ ref_scores=pred_dicts[0]['pred_scores'],
+                    # ~ ref_labels=pred_dicts[0]['pred_labels'],
+                    # ~ point_colors=data_dict['colored_points'][:, -3:].cpu().numpy(),
+                    # ~ point_size=4.0
+                # ~ )
+            # ~ else:
+                # ~ V.draw_scenes(
+                    # ~ points=data_dict['colored_points'][:, 1:4].cpu().numpy(),
+                    # ~ ref_boxes=pred_dicts[0]['pred_boxes'],
+                    # ~ ref_scores=pred_dicts[0]['pred_scores'],
+                    # ~ ref_labels=pred_dicts[0]['pred_labels'],
+                    # ~ point_colors=np.ones((data_dict['colored_points'].shape[0], 3)),
+                    # ~ point_size=2.0
+                # ~ )
+            
+            V.draw_scenes(
+                points=data_dict['colored_points'][:, 1:4].cpu().numpy(),
+                ref_boxes=pred_dicts[0]['pred_boxes'],
+                ref_scores=pred_dicts[0]['pred_scores'],
+                ref_labels=pred_dicts[0]['pred_labels'],
+                point_labels=pred_dicts[0]['pred_seg_labels'],
+                point_size=2.0
+            )
+            
             print('Time cost per batch: %s' % (round((time_end - time_start) / 10, 3)))
 
     logger.info('Demo done.')

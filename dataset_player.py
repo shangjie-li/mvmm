@@ -22,6 +22,8 @@ def parse_config():
         help='whether to use training mode')
     parser.add_argument('--data_augmentation', action='store_true', default=False,
         help='whether to use data augmentation')
+    parser.add_argument('--show_point_labels', action='store_true', default=False,
+        help='whether to show point labels')
 
     args = parser.parse_args()
 
@@ -56,22 +58,33 @@ if __name__ == '__main__':
                 print(val)
         print()
         
-        if set(['r', 'g', 'b']).issubset(set(dataset.used_feature_list)):
+        if args.show_point_labels:
             V.draw_scenes(
                 points=data_dict['colored_points'][:, 0:3],
                 ref_boxes=data_dict['gt_boxes'][:, :7],
                 ref_scores=None,
                 ref_labels=data_dict['gt_boxes'][:, 7].astype(np.int),
-                point_colors=data_dict['colored_points'][:, -3:],
-                point_size=4.0
+                point_labels=data_dict['point_labels'],
+                point_size=2.0
             )
+            
         else:
-            V.draw_scenes(
-                points=data_dict['colored_points'][:, 0:3],
-                ref_boxes=data_dict['gt_boxes'][:, :7],
-                ref_scores=None,
-                ref_labels=data_dict['gt_boxes'][:, 7].astype(np.int),
-                point_colors=np.ones((data_dict['colored_points'].shape[0], 3)),
-                point_size=1.0
-            )
+            if set(['r', 'g', 'b']).issubset(set(dataset.used_feature_list)):
+                V.draw_scenes(
+                    points=data_dict['colored_points'][:, 0:3],
+                    ref_boxes=data_dict['gt_boxes'][:, :7],
+                    ref_scores=None,
+                    ref_labels=data_dict['gt_boxes'][:, 7].astype(np.int),
+                    point_colors=data_dict['colored_points'][:, -3:],
+                    point_size=4.0
+                )
+            else:
+                V.draw_scenes(
+                    points=data_dict['colored_points'][:, 0:3],
+                    ref_boxes=data_dict['gt_boxes'][:, :7],
+                    ref_scores=None,
+                    ref_labels=data_dict['gt_boxes'][:, 7].astype(np.int),
+                    point_colors=np.ones((data_dict['colored_points'].shape[0], 3)),
+                    point_size=2.0
+                )
         
