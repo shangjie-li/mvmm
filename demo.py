@@ -60,7 +60,7 @@ def parse_config():
 def main():
     args, cfg = parse_config()
     logger = common_utils.create_logger()
-    logger.info('-----------------Quick Demo of PointPillars-------------------------')
+    logger.info('-----------------Quick Demo of MVMM-------------------------')
     demo_dataset = DemoDataset(
         dataset_cfg=cfg.DATA_CONFIG, class_names=cfg.CLASS_NAMES, training=False,
         data_path=Path(args.data_path), logger=logger

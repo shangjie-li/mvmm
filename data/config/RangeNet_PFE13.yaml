@@ -45,7 +45,7 @@ MODEL:
     NAME: MVMM
 
     RV_BACKBONE:
-        NAME: ResNet
+        NAME: RangeNet
         FULL_SIZE_OF_RANGE_IMAGE: [64, 2048]
         FRONT_SIZE_OF_RANGE_IMAGE: [48, 512]
         LIDAR_FOV_UP: 2

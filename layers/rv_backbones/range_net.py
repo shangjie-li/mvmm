@@ -4,6 +4,8 @@ import torch.nn.functional as F
 import numpy as np
 from collections import OrderedDict
 
+from utils import loss_utils
+
 
 class BasicBlock(nn.Module):
     def __init__(self, in_planes, planes):
@@ -155,6 +157,27 @@ class RangeNet(nn.Module):
         
         self.num_rv_features = self.num_class + 1
         self.conv_3x3 = nn.Conv2d(self.decoder.output_channels, self.num_rv_features, kernel_size=3, stride=1, padding=1, bias=False)
+        self.add_module('seg_loss_func', loss_utils.WeightedCrossEntropyLoss())
+    
+    def get_seg_loss(self, batch_dict):
+        seg_preds = batch_dict['seg_preds_for_training'].unsqueeze(0) # (1, N1 + N2 + ..., input_channels), float
+        seg_labels = batch_dict['point_labels'].unsqueeze(0) # (1, N1 + N2 + ...), int
+        seg_frequencies = batch_dict['point_frequencies'].unsqueeze(0) # (1, N1 + N2 + ...), float
+        
+        batch_size = batch_dict['batch_size']
+        positives = seg_labels > 0
+        negatives = seg_labels == 0
+        seg_weights = (1.0 * positives + 1.0 * negatives).float() # seg_weights consider both positives and negatives
+        seg_weights /= torch.log(seg_frequencies + 1)
+        
+        seg_one_hot_targets = torch.zeros(*list(seg_labels.shape), self.num_class + 1, dtype=seg_labels.dtype, device=seg_labels.device)
+        seg_one_hot_targets.scatter_(dim=-1, index=seg_labels.unsqueeze(dim=-1).long(), value=1.0) # (1, N1 + N2 + ..., input_channels)
+        
+        seg_loss_src = self.seg_loss_func(seg_preds, seg_one_hot_targets, weights=seg_weights) # (1, N1 + N2 + ...)
+        seg_loss = seg_loss_src.sum() / batch_size
+        seg_loss = seg_loss * self.model_cfg.LOSS_CONFIG.LOSS_WEIGHTS['seg_weight']
+        
+        return seg_loss
     
     def forward(self, batch_dict, **kwargs):
         batch_points = batch_dict['colored_points'] # (N1 + N2 + ..., 8), Points of (batch_id, x, y, z, intensity, r, g, b)
@@ -194,9 +217,9 @@ class RangeNet(nn.Module):
             max_u = int(min_u + self.front_size[1])
             front_range_image = full_range_image[:, 0:self.front_size[0], min_u:max_u]
             
-            # import matplotlib.pyplot as plt
-            # plt.imshow(front_range_image[3:4, :, :].permute(1, 2, 0).cpu().numpy())
-            # plt.show()
+            # ~ import matplotlib.pyplot as plt
+            # ~ plt.imshow(front_range_image[:3, :, :].permute(1, 2, 0).cpu().numpy())
+            # ~ plt.show()
             
             batch_point_us.append(us[:, None])
             batch_point_vs.append(vs[:, None])
@@ -208,9 +231,7 @@ class RangeNet(nn.Module):
         
         x, skip_features = self.encoder(batch_range_images)
         batch_range_images = self.decoder(x, skip_features)
-        
         batch_range_images = self.conv_3x3(batch_range_images)
-        batch_range_images = F.softmax(batch_range_images, dim=1)
         
         batch_rv_features = []
         batch_size = batch_points[:, 0].max().int().item() + 1
@@ -219,6 +240,19 @@ class RangeNet(nn.Module):
             us = batch_point_us[batch_mask, :].squeeze()
             vs = batch_point_vs[batch_mask, :].squeeze()
             range_image = batch_range_images[batch_idx, ...]
+            
+            # ~ import matplotlib.pyplot as plt
+            # ~ import time
+            # ~ fig = plt.figure(figsize=(16, 3))
+            # ~ fig.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.95, wspace=0.05, hspace=0.05)
+            # ~ range_image_sm = F.softmax(range_image.detach(), dim=0)
+            # ~ for i in range(0, 4):
+                # ~ img = range_image_sm[i:i + 1, :, :].permute(1, 2, 0).cpu().numpy()
+                # ~ plt.subplot(2, 2, i + 1)
+                # ~ plt.imshow(img)
+                # ~ plt.axis('off')
+            # ~ plt.show()
+            # ~ fig.savefig(time.asctime(time.localtime(time.time())), dpi=200)
             
             full_range_image = torch.zeros(
                 (self.num_rv_features, self.full_size[0], self.full_size[1]),
@@ -238,6 +272,13 @@ class RangeNet(nn.Module):
             batch_rv_features.append(rv_features)
         
         batch_rv_features = torch.cat(batch_rv_features, dim=0)
-        batch_dict['rv_features'] = batch_rv_features
+        
+        batch_dict['rv_features'] = batch_rv_features # (N1 + N2 + ..., num_rv_features)
+        
+        if self.training:
+            batch_dict['seg_preds_for_training'] = batch_rv_features # (N1 + N2 + ..., num_rv_features)
+            
+        else:
+            batch_dict['seg_preds_for_testing'] = batch_rv_features # (N1 + N2 + ..., num_rv_features)
         
         return batch_dict
