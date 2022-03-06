@@ -39,8 +39,8 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
     class_names = dataset.class_names
     det_annos = []
     seg_iou_dict = {}
-    for name in class_names:
-        seg_iou_dict[name] = []
+    for idx in range(len(class_names) + 1):
+        seg_iou_dict[idx] = []
 
     logger.info('*************** EPOCH %s EVALUATION *****************' % epoch_id)
     if dist_test:
@@ -97,8 +97,10 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
             output_path=final_output_dir if save_to_file else None
         )
         det_annos += annos
-        for idx, name in enumerate(class_names):
-            seg_iou_dict[name].append(ret_dict['seg_ious'][idx])
+        for idx in range(len(class_names) + 1):
+            iou = ret_dict['seg_ious'][idx]
+            if iou is not None:
+                seg_iou_dict[idx].append(iou)
         
         if cfg.LOCAL_RANK == 0:
             progress_bar.set_postfix(disp_dict)
@@ -154,11 +156,14 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
     ret_dict.update(result_dict)
     
     seg_miou = []
-    for name in class_names:
-        seg_iou_dict[name] = np.mean(seg_iou_dict[name])
-        seg_miou.append(seg_iou_dict[name])
-        logger.info('seg_iou_%s: %f' % (name, seg_iou_dict[name]))
-    logger.info('seg_miou: %f' % np.mean(seg_miou))
+    for idx in range(len(class_names) + 1):
+        seg_iou_dict[idx] = np.mean(seg_iou_dict[idx]) if len(seg_iou_dict[idx]) > 0 else 0.0
+        seg_miou.append(seg_iou_dict[idx])
+        if idx == 0:
+            logger.info('Background IoU: %f' % seg_iou_dict[idx])
+        else:
+            logger.info('%s IoU: %f' % (class_names[idx - 1], seg_iou_dict[idx]))
+    logger.info('mIoU: %f' % np.mean(seg_miou))
 
     logger.info('Result is save to %s' % result_dir)
     logger.info('****************Evaluation done.*****************')

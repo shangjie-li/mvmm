@@ -208,14 +208,15 @@ class MVMM(nn.Module):
                     recall_dict['rcnn_%s' % str(cur_thresh)] += (iou3d_rcnn.max(dim=0)[0] > cur_thresh).sum().item()
         
         recall_dict['seg_ious'] = []
-        num_class = seg_preds.shape[1] - 1
         seg_label_preds = torch.max(torch.sigmoid(seg_preds), dim=-1)[1]
-        for idx in range(num_class):
-            label = idx + 1
-            intersection_mask = (seg_label_preds == label) & (point_labels == label)
-            union_mask = (seg_label_preds == label) | (point_labels == label)
-            iou = intersection_mask.sum().item() / max(union_mask.sum().item(), 1)
-            recall_dict['seg_ious'].append(iou)
+        for idx in range(seg_preds.shape[1]):
+            if (point_labels == idx).sum().item() > 0:
+                intersection_mask = (seg_label_preds == idx) & (point_labels == idx)
+                union_mask = (seg_label_preds == idx) | (point_labels == idx)
+                iou = intersection_mask.sum().item() / max(union_mask.sum().item(), 1)
+                recall_dict['seg_ious'].append(iou)
+            else:
+                recall_dict['seg_ious'].append(None)
         
         return recall_dict
 

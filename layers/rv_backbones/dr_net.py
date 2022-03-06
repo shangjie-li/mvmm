@@ -12,22 +12,27 @@ class DilatedResidualBlock(nn.Module):
         super().__init__()
         
         self.conv_1x1_1 = nn.Conv2d(inp_channels, out_channels, kernel_size=1, stride=1, padding=0, bias=False)
+        self.bn1 = nn.BatchNorm2d(out_channels)
         
         self.conv_d1 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1, dilation=1, bias=False)
+        self.bn_d1 = nn.BatchNorm2d(out_channels)
         self.conv_d2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=2, dilation=2, bias=False)
+        self.bn_d2 = nn.BatchNorm2d(out_channels)
         self.conv_d3 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=3, dilation=3, bias=False)
+        self.bn_d3 = nn.BatchNorm2d(out_channels)
         
         self.conv_1x1_2 = nn.Conv2d(out_channels * 3, out_channels, kernel_size=1, stride=1, padding=0, bias=False)
+        self.bn2 = nn.BatchNorm2d(out_channels)
     
     def forward(self, inputs):
-        x0 = self.conv_1x1_1(inputs)
+        x0 = self.bn1(self.conv_1x1_1(inputs))
         
-        x1 = self.conv_d1(x0)
-        x2 = self.conv_d2(x1)
-        x3 = self.conv_d3(x2)
+        x1 = self.bn_d1(self.conv_d1(x0))
+        x2 = self.bn_d2(self.conv_d2(x1))
+        x3 = self.bn_d3(self.conv_d3(x2))
         
         x = torch.cat([x1, x2, x3], dim=1)
-        x = self.conv_1x1_2(x)
+        x = self.bn2(self.conv_1x1_2(x))
         x += x0
         
         return x
