@@ -64,7 +64,7 @@ class MVMM(nn.Module):
 
         pv_bridge_module = pv_bridges.__all__[self.model_cfg.PV_BRIDGE.NAME](
             model_cfg=self.model_cfg.PV_BRIDGE,
-            input_channels=model_info_dict['num_rv_features'],
+            input_channels=model_info_dict['num_rv_features'] if 'num_rv_features' in model_info_dict else 0,
             point_cloud_range=model_info_dict['point_cloud_range'],
             training=model_info_dict['training'],
         )
@@ -183,11 +183,16 @@ class MVMM(nn.Module):
         return it, epoch
 
     @staticmethod
-    def generate_recall_record(box_preds, gt_boxes, thresh_list, seg_preds, point_labels):
-        recall_dict = {'gt': 0}
-        for cur_thresh in thresh_list:
-            recall_dict['roi_%s' % (str(cur_thresh))] = 0
-            recall_dict['rcnn_%s' % (str(cur_thresh))] = 0
+    def generate_recall_record(recall_dict, box_preds, gt_boxes, thresh_list, seg_preds, point_labels):
+        assert len(seg_preds.shape) == 2
+        num_class = seg_preds.shape[1] - 1
+        
+        if recall_dict.__len__() == 0:
+            recall_dict = {'gt': 0}
+            for cur_thresh in thresh_list:
+                recall_dict['roi_%s' % (str(cur_thresh))] = 0
+                recall_dict['rcnn_%s' % (str(cur_thresh))] = 0
+            recall_dict['seg_ious'] = [None for i in range(num_class + 1)]
         
         cur_gt = gt_boxes
         k = cur_gt.__len__() - 1
@@ -207,16 +212,20 @@ class MVMM(nn.Module):
                 else:
                     recall_dict['rcnn_%s' % str(cur_thresh)] += (iou3d_rcnn.max(dim=0)[0] > cur_thresh).sum().item()
         
-        recall_dict['seg_ious'] = []
+        
         seg_label_preds = torch.max(torch.sigmoid(seg_preds), dim=-1)[1]
-        for idx in range(seg_preds.shape[1]):
+        for idx in range(num_class + 1):
             if (point_labels == idx).sum().item() > 0:
                 intersection_mask = (seg_label_preds == idx) & (point_labels == idx)
                 union_mask = (seg_label_preds == idx) | (point_labels == idx)
-                iou = intersection_mask.sum().item() / max(union_mask.sum().item(), 1)
-                recall_dict['seg_ious'].append(iou)
+                cur_iou = intersection_mask.sum().item() / union_mask.sum().item()
             else:
-                recall_dict['seg_ious'].append(None)
+                cur_iou = None
+            if recall_dict['seg_ious'][idx] is not None:
+                if cur_iou is not None:
+                    recall_dict['seg_ious'][idx] = (recall_dict['seg_ious'][idx] + cur_iou) / 2
+            else:
+                recall_dict['seg_ious'][idx] = cur_iou
         
         return recall_dict
 
@@ -227,24 +236,28 @@ class MVMM(nn.Module):
         if self.training:
             ret_dict, tb_dict, disp_dict = {}, {}, {}
             
-            seg_loss = self.rv_backbone.get_seg_loss(batch_dict)
             cls_loss = self.dense_head.get_cls_loss(batch_dict)
             loc_loss, dir_loss = self.dense_head.get_box_loss(batch_dict)
-            
-            loss = seg_loss + cls_loss + loc_loss + dir_loss
-            ret_dict['loss'] = loss
-            
-            tb_dict['seg_loss'] = seg_loss.item()
             tb_dict['cls_loss'] = cls_loss.item()
             tb_dict['loc_loss'] = loc_loss.item()
             tb_dict['dir_loss'] = dir_loss.item()
-            tb_dict['loss'] = loss.item()
+            
+            if self.rv_backbone is not None:
+                seg_loss = self.rv_backbone.get_seg_loss(batch_dict)
+                tb_dict['seg_loss'] = seg_loss.item()
+                all_loss = cls_loss + loc_loss + dir_loss + seg_loss
+            else:
+                all_loss = cls_loss + loc_loss + dir_loss
+            
+            ret_dict['all_loss'] = all_loss
+            tb_dict['all_loss'] = all_loss.item()
             
             return ret_dict, tb_dict, disp_dict
             
         else:
             batch_size = batch_dict['batch_size']
             pred_dicts = []
+            recall_dict = {}
             
             for batch_idx in range(batch_size):
                 box_preds = batch_dict['box_preds_for_testing'][batch_idx] # (num_boxes, 7)
@@ -265,7 +278,12 @@ class MVMM(nn.Module):
                 
                 batch_points = batch_dict['colored_points'] # (N1 + N2 + ..., 8), Points of (batch_id, x, y, z, intensity, r, g, b)
                 batch_mask = batch_points[:, 0] == batch_idx
-                seg_preds = batch_dict['seg_preds_for_testing'][batch_mask, :] # (Ni, num_class + 1)
+                
+                if self.rv_backbone is not None:
+                    seg_preds = batch_dict['seg_preds_for_testing'][batch_mask, :] # (Ni, num_class + 1)
+                else:
+                    seg_preds = torch.zeros((batch_mask.shape[0], self.num_class + 1),
+                        dtype=batch_points.dtype, device=batch_points.device).float() # (Ni, num_class + 1)
                 
                 seg_score_preds, seg_label_preds = torch.max(torch.sigmoid(seg_preds), dim=-1)
                 
@@ -277,19 +295,13 @@ class MVMM(nn.Module):
                     'pred_seg_scores': seg_score_preds,
                 })
                 
-                if 'gt_boxes' not in batch_dict:
-                    recall_dict = {}
-                else:
+                if 'gt_boxes' in batch_dict:
                     gt_boxes = batch_dict['gt_boxes'][batch_idx]
                     point_labels = batch_dict['point_labels'][batch_mask]
-                    recall_dict = self.generate_recall_record(
-                        box_preds=box_preds,
-                        gt_boxes=gt_boxes,
+                    recall_dict = self.generate_recall_record(recall_dict=recall_dict, box_preds=box_preds, gt_boxes=gt_boxes,
                         thresh_list=self.model_cfg.POST_PROCESSING.RECALL_THRESH_LIST,
-                        seg_preds=seg_preds,
-                        point_labels=point_labels
-                    )
-                
+                        seg_preds=seg_preds, point_labels=point_labels)
+            
             return pred_dicts, recall_dict
 
 
@@ -321,7 +333,7 @@ def model_fn_decorator():
         load_data_to_gpu(batch_dict)
         ret_dict, tb_dict, disp_dict = model(batch_dict)
 
-        loss = ret_dict['loss'].mean()
+        loss = ret_dict['all_loss'].mean()
         if hasattr(model, 'update_global_step'):
             model.update_global_step()
         else:

@@ -42,7 +42,7 @@ def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, ac
         optimizer.step()
 
         accumulated_iter += 1
-        disp_dict.update({'loss': loss.item(), 'lr': cur_lr})
+        disp_dict.update({'all_loss': loss.item(), 'lr': cur_lr})
 
         # log to console and tensorboard
         if rank == 0:
@@ -52,7 +52,6 @@ def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, ac
             tbar.refresh()
 
             if tb_log is not None:
-                tb_log.add_scalar('train/loss', loss, accumulated_iter)
                 tb_log.add_scalar('meta_data/learning_rate', cur_lr, accumulated_iter)
                 for key, val in tb_dict.items():
                     tb_log.add_scalar('train/' + key, val, accumulated_iter)

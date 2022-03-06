@@ -18,7 +18,7 @@ DATA_CONFIG:
     
     GET_ITEM_LIST: ['colored_points']
     SRC_FEATURE_LIST: ['x', 'y', 'z', 'intensity', 'r', 'g', 'b']
-    USED_FEATURE_LIST: ['r', 'g', 'b']
+    USED_FEATURE_LIST: ['x', 'y', 'z', 'range', 'intensity', 'r', 'g', 'b']
     
     DATA_AUGMENTOR:
         - NAME: gt_sampling
@@ -53,7 +53,7 @@ MODEL:
         
         LOSS_CONFIG:
             LOSS_WEIGHTS: {
-                'seg_weight': 1.0,
+                'seg_weight': 0.001,
             }
 
     PV_BRIDGE:

@@ -47,43 +47,46 @@ class PFE(nn.Module):
         self.extra_channels += 3 if self.model_cfg.USE_RELATIVE_XYZ_TO_CENTER else 0
         
         assert len(self.model_cfg.FILTERS) > 0
-        self.filters = self.model_cfg.FILTERS
+        self.num_pv_features = self.model_cfg.FILTERS[-1]
         
-        self.pfn_layers = PFNLayer(self.base_channels + self.extra_channels, self.filters[-1])
-        
-        self.num_class = self.input_channels - 1
-        self.num_pv_features = self.filters[-1] + self.num_class
+        if self.input_channels > 0:
+            self.pfn_layers = PFNLayer(self.base_channels + self.extra_channels + self.input_channels - 1, self.num_pv_features)
+        else:
+            self.pfn_layers = PFNLayer(self.base_channels + self.extra_channels, self.num_pv_features)
     
     def forward(self, batch_dict, **kwargs):
         batch_points = batch_dict['colored_points'] # (N1 + N2 + ..., 8), Points of (batch_id, x, y, z, intensity, r, g, b)
-        batch_rv_features = batch_dict['rv_features'] # (N1 + N2 + ..., input_channels)
+        if self.input_channels > 0:
+            batch_rv_features = batch_dict['rv_features'] # (N1 + N2 + ..., input_channels)
         
-        self.pillar_generator = PointToVoxel(
+        num_point_features = self.base_channels + self.input_channels - 1 if self.input_channels > 0 else self.base_channels
+        pillar_generator = PointToVoxel(
             vsize_xyz=self.model_cfg.PILLAR_SIZE,
             coors_range_xyz=self.point_cloud_range,
-            num_point_features=self.base_channels + self.num_class,
+            num_point_features=num_point_features,
             max_num_voxels=self.model_cfg.MAX_NUMBER_OF_PILLARS[self.mode],
             max_num_points_per_voxel=self.model_cfg.MAX_POINTS_PER_PILLAR,
             device=batch_points.device
         )
         
         batch_pv_features = []
-        batch_pv_seg_features = []
         batch_coords = []
         batch_size = batch_points[:, 0].max().int().item() + 1
         for batch_idx in range(batch_size):
             batch_mask = batch_points[:, 0] == batch_idx
             this_points = batch_points[batch_mask, :] # (Ni, 8), Points of (batch_id, x, y, z, intensity, r, g, b)
-            rv_features = batch_rv_features[batch_mask, :] # (Ni, input_channels)
+            if self.input_channels > 0:
+                rv_features = batch_rv_features[batch_mask, :] # (Ni, input_channels)
+                rv_features = torch.softmax(rv_features, dim=-1)[:, 1:]
+                pillars, coords, num_points_per_pillar = pillar_generator(torch.cat([this_points[:, 1:5], rv_features], dim=-1))
+                pv_features, pv_seg_features = pillars[:, :, :4], pillars[:, :, 4:]
+            else:
+                pillars, coords, num_points_per_pillar = pillar_generator(this_points[:, 1:5].contiguous())
+                pv_features = pillars
             
-            rv_features = torch.softmax(rv_features, dim=-1)[:, 1:] # (Ni, num_class)
-            
-            # pillars: (num_pillars, max_points_per_pillar, base_channels + num_class)
+            # pillars: (num_pillars, max_points_per_pillar, num_point_features)
             # coords: (num_pillars, 3), Location of pillars, [zi, yi, xi], zi should be 0
             # num_points_per_pillar: (num_pillars), Number of points in each pillar
-            pillars, coords, num_points_per_pillar = self.pillar_generator(torch.cat([this_points[:, 1:5], rv_features], dim=-1))
-            pv_features = pillars[:, :, :4]
-            pv_seg_features = pillars[:, :, 4:]
             
             absolute_xyz = pv_features[:, :, :3]
             if self.model_cfg.USE_RELATIVE_XYZ_TO_CLUSTER:
@@ -97,68 +100,40 @@ class PFE(nn.Module):
                 xyz_to_center[:, :, 2] = absolute_xyz[:, :, 2] - (coords[:, 0].type_as(absolute_xyz).unsqueeze(1) * self.pillar_z + self.z_offset)
                 pv_features = torch.cat([pv_features, xyz_to_center], dim=-1)
             
+            pv_features = torch.cat([pv_features, pv_seg_features], dim=-1) if self.input_channels > 0 else pv_features
             batch_pv_features.append(pv_features)
-            batch_pv_seg_features.append(pv_seg_features)
             
             coords = torch.cat([torch.ones((coords.shape[0], 1), dtype=coords.dtype, device=coords.device) * batch_idx, coords], dim=-1)
             batch_coords.append(coords)
-            
+        
         batch_pv_features = torch.cat(batch_pv_features, dim=0)
-        batch_pv_seg_features = torch.cat(batch_pv_seg_features, dim=0)
         batch_coords = torch.cat(batch_coords, dim=0)
         
         batch_pv_features = self.pfn_layers(batch_pv_features)
-        batch_pv_seg_features = torch.max(batch_pv_seg_features, dim=1, keepdim=False)[0]
         
         batch_bev_features = []
-        batch_bev_seg_features = []
         batch_size = batch_coords[:, 0].max().int().item() + 1
         for batch_idx in range(batch_size):
             batch_mask = batch_coords[:, 0] == batch_idx
             this_coords = batch_coords[batch_mask, :]
             pv_features = batch_pv_features[batch_mask, :]
-            pv_seg_features = batch_pv_seg_features[batch_mask, :]
             
             bev_features = torch.zeros(
-                (self.filters[-1], self.nz * self.ny * self.nx),
+                (self.num_pv_features, self.nz * self.ny * self.nx),
                 dtype=pv_features.dtype,
                 device=pv_features.device
-            )
-            bev_seg_features = torch.zeros(
-                (self.num_class, self.nz * self.ny * self.nx),
-                dtype=pv_seg_features.dtype,
-                device=pv_seg_features.device
             )
             
             indices = (this_coords[:, 1] + this_coords[:, 2] * self.nx + this_coords[:, 3]).type(torch.long)
             bev_features[:, indices] = pv_features.t()
-            bev_seg_features[:, indices] = pv_seg_features.t()
-            
-            # ~ import matplotlib.pyplot as plt
-            # ~ import time
-            # ~ fig = plt.figure(figsize=(16, 8))
-            # ~ fig.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.95, wspace=0.05, hspace=0.05)
-            # ~ for i in range(0, 3):
-                # ~ img = bev_seg_features[i:i + 1, :].view(self.nz, self.ny, self.nx).permute(1, 2, 0).cpu().numpy()
-                # ~ img = img[::-1, :, :] # y -> -y
-                # ~ plt.subplot(1, 3, i + 1)
-                # ~ plt.imshow(img)
-                # ~ plt.axis('off')
-            # ~ plt.show()
-            # ~ fig.savefig(time.asctime(time.localtime(time.time())), dpi=200)
             
             batch_bev_features.append(bev_features)
-            batch_bev_seg_features.append(bev_seg_features)
         
         batch_bev_features = torch.stack(batch_bev_features, dim=0)
-        batch_bev_seg_features = torch.stack(batch_bev_seg_features, dim=0)
         
         batch_bev_features = batch_bev_features.view(
-            batch_size, self.filters[-1] * self.nz, self.ny, self.nx) # (B, filters, ny, nx)
-        batch_bev_seg_features = batch_bev_seg_features.view(
-            batch_size, self.num_class * self.nz, self.ny, self.nx) # (B, num_class, ny, nx)
+            batch_size, self.num_pv_features * self.nz, self.ny, self.nx) # (B, num_pv_features, ny, nx)
         
-        batch_bev_features = torch.cat([batch_bev_features, batch_bev_seg_features], dim=1)
         batch_dict['pv_features'] = batch_bev_features # (B, num_pv_features, ny, nx)
         
         return batch_dict
