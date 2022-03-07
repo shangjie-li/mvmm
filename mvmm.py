@@ -278,11 +278,12 @@ class MVMM(nn.Module):
                 
                 batch_points = batch_dict['colored_points'] # (N1 + N2 + ..., 8), Points of (batch_id, x, y, z, intensity, r, g, b)
                 batch_mask = batch_points[:, 0] == batch_idx
+                num_points = batch_points[batch_mask, :].shape[0]
                 
                 if self.rv_backbone is not None:
                     seg_preds = batch_dict['seg_preds_for_testing'][batch_mask, :] # (Ni, num_class + 1)
                 else:
-                    seg_preds = torch.zeros((batch_mask.shape[0], self.num_class + 1),
+                    seg_preds = torch.zeros((num_points, self.num_class + 1),
                         dtype=batch_points.dtype, device=batch_points.device).float() # (Ni, num_class + 1)
                 
                 seg_score_preds, seg_label_preds = torch.max(torch.sigmoid(seg_preds), dim=-1)
