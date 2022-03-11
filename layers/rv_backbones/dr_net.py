@@ -116,7 +116,7 @@ class DRNet(nn.Module):
                 UpsampleDilatedResidualBlock(c_in_list[idx], upsample_filters[idx], use_interpolate[idx])
             )
         
-        self.num_rv_features = 16
+        self.num_rv_features = 4
         self.conv_1x1 = nn.Conv2d(upsample_filters[-1], self.num_rv_features, kernel_size=1, stride=1, padding=0, bias=False)
     
     def forward(self, batch_dict, **kwargs):
