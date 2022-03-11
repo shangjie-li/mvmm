@@ -144,7 +144,6 @@ def main():
                 ref_boxes=pred_dicts[0]['pred_boxes'],
                 ref_scores=pred_dicts[0]['pred_scores'],
                 ref_labels=pred_dicts[0]['pred_labels'],
-                point_labels=pred_dicts[0]['pred_seg_labels'],
                 point_size=2.0
             )
             

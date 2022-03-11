@@ -42,16 +42,15 @@ class PFE(nn.Module):
         self.z_offset = self.pillar_z / 2 + self.point_cloud_range[2]
         
         self.base_channels = 4
-        self.extra_channels = 0
-        self.extra_channels += 3 if self.model_cfg.USE_RELATIVE_XYZ_TO_CLUSTER else 0
-        self.extra_channels += 3 if self.model_cfg.USE_RELATIVE_XYZ_TO_CENTER else 0
-        
-        assert len(self.model_cfg.FILTERS) > 0
-        self.num_pv_features = self.model_cfg.FILTERS[-1]
         
         if self.input_channels > 0:
-            self.pfn_layers = PFNLayer(self.base_channels + self.extra_channels + self.input_channels - 1, self.num_pv_features)
+            self.num_pv_features = self.input_channels
         else:
+            assert len(self.model_cfg.FILTERS) > 0
+            self.num_pv_features = self.model_cfg.FILTERS[-1]
+            self.extra_channels = 0
+            self.extra_channels += 3 if self.model_cfg.USE_RELATIVE_XYZ_TO_CLUSTER else 0
+            self.extra_channels += 3 if self.model_cfg.USE_RELATIVE_XYZ_TO_CENTER else 0
             self.pfn_layers = PFNLayer(self.base_channels + self.extra_channels, self.num_pv_features)
     
     def forward(self, batch_dict, **kwargs):
@@ -59,7 +58,7 @@ class PFE(nn.Module):
         if self.input_channels > 0:
             batch_rv_features = batch_dict['rv_features'] # (N1 + N2 + ..., input_channels)
         
-        num_point_features = self.base_channels + self.input_channels - 1 if self.input_channels > 0 else self.base_channels
+        num_point_features = self.base_channels + self.input_channels if self.input_channels > 0 else self.base_channels
         pillar_generator = PointToVoxel(
             vsize_xyz=self.model_cfg.PILLAR_SIZE,
             coors_range_xyz=self.point_cloud_range,
@@ -75,32 +74,32 @@ class PFE(nn.Module):
         for batch_idx in range(batch_size):
             batch_mask = batch_points[:, 0] == batch_idx
             this_points = batch_points[batch_mask, :] # (Ni, 8), Points of (batch_id, x, y, z, intensity, r, g, b)
-            if self.input_channels > 0:
-                rv_features = batch_rv_features[batch_mask, :] # (Ni, input_channels)
-                rv_features = torch.softmax(rv_features, dim=-1)[:, 1:]
-                pillars, coords, num_points_per_pillar = pillar_generator(torch.cat([this_points[:, 1:5], rv_features], dim=-1))
-                pv_features, pv_seg_features = pillars[:, :, :4], pillars[:, :, 4:]
-            else:
-                pillars, coords, num_points_per_pillar = pillar_generator(this_points[:, 1:5].contiguous())
-                pv_features = pillars
             
             # pillars: (num_pillars, max_points_per_pillar, num_point_features)
             # coords: (num_pillars, 3), Location of pillars, [zi, yi, xi], zi should be 0
             # num_points_per_pillar: (num_pillars), Number of points in each pillar
             
-            absolute_xyz = pv_features[:, :, :3]
-            if self.model_cfg.USE_RELATIVE_XYZ_TO_CLUSTER:
-                mean_xyz = absolute_xyz.sum(dim=1, keepdim=True) / num_points_per_pillar.type_as(absolute_xyz).view(-1, 1, 1)
-                xyz_to_cluster = absolute_xyz - mean_xyz
-                pv_features = torch.cat([pv_features, xyz_to_cluster], dim=-1)
-            if self.model_cfg.USE_RELATIVE_XYZ_TO_CENTER:
-                xyz_to_center = torch.zeros_like(absolute_xyz)
-                xyz_to_center[:, :, 0] = absolute_xyz[:, :, 0] - (coords[:, 2].type_as(absolute_xyz).unsqueeze(1) * self.pillar_x + self.x_offset)
-                xyz_to_center[:, :, 1] = absolute_xyz[:, :, 1] - (coords[:, 1].type_as(absolute_xyz).unsqueeze(1) * self.pillar_y + self.y_offset)
-                xyz_to_center[:, :, 2] = absolute_xyz[:, :, 2] - (coords[:, 0].type_as(absolute_xyz).unsqueeze(1) * self.pillar_z + self.z_offset)
-                pv_features = torch.cat([pv_features, xyz_to_center], dim=-1)
+            if self.input_channels > 0:
+                rv_features = batch_rv_features[batch_mask, :] # (Ni, input_channels)
+                pillars, coords, num_points_per_pillar = pillar_generator(torch.cat([this_points[:, 1:5], rv_features], dim=-1))
+                pv_features = pillars[:, :, 4:]
             
-            pv_features = torch.cat([pv_features, pv_seg_features], dim=-1) if self.input_channels > 0 else pv_features
+            else:
+                pillars, coords, num_points_per_pillar = pillar_generator(this_points[:, 1:5].contiguous())
+                pv_features = pillars
+                
+                absolute_xyz = pv_features[:, :, :3]
+                if self.model_cfg.USE_RELATIVE_XYZ_TO_CLUSTER:
+                    mean_xyz = absolute_xyz.sum(dim=1, keepdim=True) / num_points_per_pillar.type_as(absolute_xyz).view(-1, 1, 1)
+                    xyz_to_cluster = absolute_xyz - mean_xyz
+                    pv_features = torch.cat([pv_features, xyz_to_cluster], dim=-1)
+                if self.model_cfg.USE_RELATIVE_XYZ_TO_CENTER:
+                    xyz_to_center = torch.zeros_like(absolute_xyz)
+                    xyz_to_center[:, :, 0] = absolute_xyz[:, :, 0] - (coords[:, 2].type_as(absolute_xyz).unsqueeze(1) * self.pillar_x + self.x_offset)
+                    xyz_to_center[:, :, 1] = absolute_xyz[:, :, 1] - (coords[:, 1].type_as(absolute_xyz).unsqueeze(1) * self.pillar_y + self.y_offset)
+                    xyz_to_center[:, :, 2] = absolute_xyz[:, :, 2] - (coords[:, 0].type_as(absolute_xyz).unsqueeze(1) * self.pillar_z + self.z_offset)
+                    pv_features = torch.cat([pv_features, xyz_to_center], dim=-1)
+            
             batch_pv_features.append(pv_features)
             
             coords = torch.cat([torch.ones((coords.shape[0], 1), dtype=coords.dtype, device=coords.device) * batch_idx, coords], dim=-1)
@@ -109,7 +108,10 @@ class PFE(nn.Module):
         batch_pv_features = torch.cat(batch_pv_features, dim=0)
         batch_coords = torch.cat(batch_coords, dim=0)
         
-        batch_pv_features = self.pfn_layers(batch_pv_features)
+        if self.input_channels > 0:
+            batch_pv_features = torch.mean(batch_pv_features, dim=1, keepdim=False)
+        else:
+            batch_pv_features = self.pfn_layers(batch_pv_features)
         
         batch_bev_features = []
         batch_size = batch_coords[:, 0].max().int().item() + 1

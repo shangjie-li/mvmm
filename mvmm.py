@@ -52,7 +52,6 @@ class MVMM(nn.Module):
         rv_backbone_module = rv_backbones.__all__[self.model_cfg.RV_BACKBONE.NAME](
             model_cfg=self.model_cfg.RV_BACKBONE,
             input_channels=model_info_dict['num_point_features'],
-            num_class=self.num_class,
         )
         model_info_dict['module_list'].append(rv_backbone_module)
         model_info_dict['num_rv_features'] = rv_backbone_module.num_rv_features
@@ -183,16 +182,12 @@ class MVMM(nn.Module):
         return it, epoch
 
     @staticmethod
-    def generate_recall_record(recall_dict, box_preds, gt_boxes, thresh_list, seg_preds, point_labels):
-        assert len(seg_preds.shape) == 2
-        num_class = seg_preds.shape[1] - 1
-        
+    def generate_recall_record(recall_dict, box_preds, gt_boxes, thresh_list):
         if recall_dict.__len__() == 0:
             recall_dict = {'gt': 0}
             for cur_thresh in thresh_list:
                 recall_dict['roi_%s' % (str(cur_thresh))] = 0
                 recall_dict['rcnn_%s' % (str(cur_thresh))] = 0
-            recall_dict['seg_ious'] = [None for i in range(num_class + 1)]
         
         cur_gt = gt_boxes
         k = cur_gt.__len__() - 1
@@ -212,21 +207,6 @@ class MVMM(nn.Module):
                 else:
                     recall_dict['rcnn_%s' % str(cur_thresh)] += (iou3d_rcnn.max(dim=0)[0] > cur_thresh).sum().item()
         
-        
-        seg_label_preds = torch.max(torch.sigmoid(seg_preds), dim=-1)[1]
-        for idx in range(num_class + 1):
-            if (point_labels == idx).sum().item() > 0:
-                intersection_mask = (seg_label_preds == idx) & (point_labels == idx)
-                union_mask = (seg_label_preds == idx) | (point_labels == idx)
-                cur_iou = intersection_mask.sum().item() / union_mask.sum().item()
-            else:
-                cur_iou = None
-            if recall_dict['seg_ious'][idx] is not None:
-                if cur_iou is not None:
-                    recall_dict['seg_ious'][idx] = (recall_dict['seg_ious'][idx] + cur_iou) / 2
-            else:
-                recall_dict['seg_ious'][idx] = cur_iou
-        
         return recall_dict
 
     def forward(self, batch_dict):
@@ -242,12 +222,7 @@ class MVMM(nn.Module):
             tb_dict['loc_loss'] = loc_loss.item()
             tb_dict['dir_loss'] = dir_loss.item()
             
-            if self.rv_backbone is not None:
-                seg_loss = self.rv_backbone.get_seg_loss(batch_dict)
-                tb_dict['seg_loss'] = seg_loss.item()
-                all_loss = cls_loss + loc_loss + dir_loss + seg_loss
-            else:
-                all_loss = cls_loss + loc_loss + dir_loss
+            all_loss = cls_loss + loc_loss + dir_loss
             
             ret_dict['all_loss'] = all_loss
             tb_dict['all_loss'] = all_loss.item()
@@ -276,32 +251,16 @@ class MVMM(nn.Module):
                 label_preds = label_preds[selected]
                 score_preds = selected_scores
                 
-                batch_points = batch_dict['colored_points'] # (N1 + N2 + ..., 8), Points of (batch_id, x, y, z, intensity, r, g, b)
-                batch_mask = batch_points[:, 0] == batch_idx
-                num_points = batch_points[batch_mask, :].shape[0]
-                
-                if self.rv_backbone is not None:
-                    seg_preds = batch_dict['seg_preds_for_testing'][batch_mask, :] # (Ni, num_class + 1)
-                else:
-                    seg_preds = torch.zeros((num_points, self.num_class + 1),
-                        dtype=batch_points.dtype, device=batch_points.device).float() # (Ni, num_class + 1)
-                
-                seg_score_preds, seg_label_preds = torch.max(torch.sigmoid(seg_preds), dim=-1)
-                
                 pred_dicts.append({
                     'pred_boxes': box_preds,
                     'pred_labels': label_preds,
                     'pred_scores': score_preds,
-                    'pred_seg_labels': seg_label_preds,
-                    'pred_seg_scores': seg_score_preds,
                 })
                 
                 if 'gt_boxes' in batch_dict:
                     gt_boxes = batch_dict['gt_boxes'][batch_idx]
-                    point_labels = batch_dict['point_labels'][batch_mask]
                     recall_dict = self.generate_recall_record(recall_dict=recall_dict, box_preds=box_preds, gt_boxes=gt_boxes,
-                        thresh_list=self.model_cfg.POST_PROCESSING.RECALL_THRESH_LIST,
-                        seg_preds=seg_preds, point_labels=point_labels)
+                        thresh_list=self.model_cfg.POST_PROCESSING.RECALL_THRESH_LIST)
             
             return pred_dicts, recall_dict
 

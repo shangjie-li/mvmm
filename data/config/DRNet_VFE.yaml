@@ -18,7 +18,7 @@ DATA_CONFIG:
     
     GET_ITEM_LIST: ['colored_points']
     SRC_FEATURE_LIST: ['x', 'y', 'z', 'intensity', 'r', 'g', 'b']
-    USED_FEATURE_LIST: ['x', 'y', 'z', 'range', 'intensity', 'r', 'g', 'b']
+    USED_FEATURE_LIST: ['x', 'y', 'z', 'range', 'intensity']
     
     DATA_AUGMENTOR:
         - NAME: gt_sampling
@@ -45,16 +45,17 @@ MODEL:
     NAME: MVMM
 
     RV_BACKBONE:
-        NAME: ResNet
+        NAME: DRNet
         FULL_SIZE_OF_RANGE_IMAGE: [64, 2048]
         FRONT_SIZE_OF_RANGE_IMAGE: [48, 512]
         LIDAR_FOV_UP: 2
         LIDAR_FOV_DOWN: 24.8
-        
-        LOSS_CONFIG:
-            LOSS_WEIGHTS: {
-                'seg_weight': 0.001,
-            }
+        DOWNSAMPLE_STRIDES: [1, 1, 2, 2, 2, 2]
+        DOWNSAMPLE_FILTERS: [32, 64, 128, 128, 256, 256]
+        USE_POOL: [False, False, True, True, True, True]
+        UPSAMPLE_STRIDES: [2, 2, 2, 2]
+        UPSAMPLE_FILTERS: [128, 128, 64, 64]
+        USE_INTERPOLATE: [True, True, True, True]
 
     PV_BRIDGE:
         NAME: VFE
@@ -64,7 +65,7 @@ MODEL:
             'test': 40000
         }
         MAX_POINTS_PER_VOXEL: 5
-        USE_ABSOLUTE_XYZI: True
+        USE_ABSOLUTE_XYZI: False
         FILTERS: [16, 16, 32, 64, 64, 128]
 
     BEV_BACKBONE:

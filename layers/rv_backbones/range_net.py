@@ -138,11 +138,10 @@ class Decoder(nn.Module):
 
 
 class RangeNet(nn.Module):
-    def __init__(self, model_cfg, input_channels, num_class, **kwargs):
+    def __init__(self, model_cfg, input_channels, **kwargs):
         super().__init__()
         self.model_cfg = model_cfg
         self.input_channels = input_channels
-        self.num_class = num_class
         
         self.pi = 3.14159
         self.full_size = self.model_cfg.FULL_SIZE_OF_RANGE_IMAGE
@@ -153,29 +152,7 @@ class RangeNet(nn.Module):
         self.encoder = Encoder(self.input_channels)
         self.decoder = Decoder(self.encoder.output_channels)
         
-        self.num_rv_features = self.num_class + 1
-        self.conv_3x3 = nn.Conv2d(self.decoder.output_channels, self.num_rv_features, kernel_size=3, stride=1, padding=1, bias=False)
-        self.add_module('seg_loss_func', loss_utils.WeightedCrossEntropyLoss())
-    
-    def get_seg_loss(self, batch_dict):
-        seg_preds = batch_dict['seg_preds_for_training'].unsqueeze(0) # (1, N1 + N2 + ..., input_channels), float
-        seg_labels = batch_dict['point_labels'].unsqueeze(0) # (1, N1 + N2 + ...), int
-        seg_frequencies = batch_dict['point_frequencies'].unsqueeze(0) # (1, N1 + N2 + ...), float
-        
-        batch_size = batch_dict['batch_size']
-        positives = seg_labels > 0
-        negatives = seg_labels == 0
-        seg_weights = (1.0 * positives + 1.0 * negatives).float() # seg_weights consider both positives and negatives
-        seg_weights /= torch.log(seg_frequencies + 1)
-        
-        seg_one_hot_targets = torch.zeros(*list(seg_labels.shape), self.num_class + 1, dtype=seg_labels.dtype, device=seg_labels.device)
-        seg_one_hot_targets.scatter_(dim=-1, index=seg_labels.unsqueeze(dim=-1).long(), value=1.0) # (1, N1 + N2 + ..., input_channels)
-        
-        seg_loss_src = self.seg_loss_func(seg_preds, seg_one_hot_targets, weights=seg_weights) # (1, N1 + N2 + ...)
-        seg_loss = seg_loss_src.sum() / batch_size
-        seg_loss = seg_loss * self.model_cfg.LOSS_CONFIG.LOSS_WEIGHTS['seg_weight']
-        
-        return seg_loss
+        self.num_rv_features = self.decoder.output_channels
     
     def forward(self, batch_dict, **kwargs):
         batch_points = batch_dict['colored_points'] # (N1 + N2 + ..., 8), Points of (batch_id, x, y, z, intensity, r, g, b)
@@ -229,7 +206,6 @@ class RangeNet(nn.Module):
         
         x, skip_features = self.encoder(batch_range_images)
         batch_range_images = self.decoder(x, skip_features)
-        batch_range_images = self.conv_3x3(batch_range_images)
         
         batch_rv_features = []
         batch_size = batch_points[:, 0].max().int().item() + 1
@@ -272,11 +248,5 @@ class RangeNet(nn.Module):
         batch_rv_features = torch.cat(batch_rv_features, dim=0)
         
         batch_dict['rv_features'] = batch_rv_features # (N1 + N2 + ..., num_rv_features)
-        
-        if self.training:
-            batch_dict['seg_preds_for_training'] = batch_rv_features # (N1 + N2 + ..., num_rv_features)
-            
-        else:
-            batch_dict['seg_preds_for_testing'] = batch_rv_features # (N1 + N2 + ..., num_rv_features)
         
         return batch_dict

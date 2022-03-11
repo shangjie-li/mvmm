@@ -45,7 +45,7 @@ class VFE(nn.Module):
         
         if self.model_cfg.USE_ABSOLUTE_XYZI and self.input_channels > 0:
             self.conv0 = spconv.SparseSequential(
-                spconv_block(self.base_channels + self.input_channels - 1, filters[0], kernel_size=3, padding=1, indice_key='subm0'),
+                spconv_block(self.base_channels + self.input_channels, filters[0], kernel_size=3, padding=1, indice_key='subm0'),
             )
         elif self.model_cfg.USE_ABSOLUTE_XYZI:
             self.conv0 = spconv.SparseSequential(
@@ -53,7 +53,7 @@ class VFE(nn.Module):
             )
         elif self.input_channels > 0:
             self.conv0 = spconv.SparseSequential(
-                spconv_block(self.input_channels - 1, filters[0], kernel_size=3, padding=1, indice_key='subm0'),
+                spconv_block(self.input_channels, filters[0], kernel_size=3, padding=1, indice_key='subm0'),
             )
         else:
             raise NotImplementedError
@@ -91,7 +91,7 @@ class VFE(nn.Module):
         if self.input_channels > 0:
             batch_rv_features = batch_dict['rv_features'] # (N1 + N2 + ..., input_channels)
         
-        num_point_features = self.base_channels + self.input_channels - 1 if self.input_channels > 0 else self.base_channels
+        num_point_features = self.base_channels + self.input_channels if self.input_channels > 0 else self.base_channels
         voxel_generator = PointToVoxel(
             vsize_xyz=self.model_cfg.VOXEL_SIZE,
             coors_range_xyz=self.point_cloud_range,
@@ -109,13 +109,11 @@ class VFE(nn.Module):
             this_points = batch_points[batch_mask, :] # (Ni, 8), Points of (batch_id, x, y, z, intensity, r, g, b)
             if self.model_cfg.USE_ABSOLUTE_XYZI and self.input_channels > 0:
                 rv_features = batch_rv_features[batch_mask, :] # (Ni, input_channels)
-                rv_features = torch.softmax(rv_features, dim=-1)[:, 1:]
                 voxels, coords, num_points_per_voxel = voxel_generator(torch.cat([this_points[:, 1:5], rv_features], dim=-1))
             elif self.model_cfg.USE_ABSOLUTE_XYZI:
                 voxels, coords, num_points_per_voxel = voxel_generator(this_points[:, 1:5].contiguous())
             elif self.input_channels > 0:
                 rv_features = batch_rv_features[batch_mask, :] # (Ni, input_channels)
-                rv_features = torch.softmax(rv_features, dim=-1)[:, 1:]
                 voxels, coords, num_points_per_voxel = voxel_generator(torch.cat([this_points[:, 1:5], rv_features], dim=-1))
                 voxels = voxels[:, :, 4:]
             else:

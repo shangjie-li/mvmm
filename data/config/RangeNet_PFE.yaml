@@ -18,7 +18,7 @@ DATA_CONFIG:
     
     GET_ITEM_LIST: ['colored_points']
     SRC_FEATURE_LIST: ['x', 'y', 'z', 'intensity', 'r', 'g', 'b']
-    USED_FEATURE_LIST: ['x', 'y', 'z', 'range', 'intensity', 'r', 'g', 'b']
+    USED_FEATURE_LIST: ['x', 'y', 'z', 'range', 'intensity']
     
     DATA_AUGMENTOR:
         - NAME: gt_sampling
@@ -50,11 +50,6 @@ MODEL:
         FRONT_SIZE_OF_RANGE_IMAGE: [48, 512]
         LIDAR_FOV_UP: 2
         LIDAR_FOV_DOWN: 24.8
-        
-        LOSS_CONFIG:
-            LOSS_WEIGHTS: {
-                'seg_weight': 0.001,
-            }
 
     PV_BRIDGE:
         NAME: PFE
@@ -64,9 +59,6 @@ MODEL:
             'test': 40000
         }
         MAX_POINTS_PER_PILLAR: 32
-        USE_RELATIVE_XYZ_TO_CLUSTER: True
-        USE_RELATIVE_XYZ_TO_CENTER: True
-        FILTERS: [64]
 
     BEV_BACKBONE:
         NAME: BaseBEVBackbone
