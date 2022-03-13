@@ -65,7 +65,6 @@ MODEL:
             'test': 40000
         }
         MAX_POINTS_PER_VOXEL: 5
-        USE_ABSOLUTE_XYZI: False
         FILTERS: [16, 16, 32, 64, 64, 128]
 
     BEV_BACKBONE:

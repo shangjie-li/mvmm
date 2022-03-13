@@ -43,20 +43,14 @@ class VFE(nn.Module):
         assert len(self.model_cfg.FILTERS) == 6
         filters = self.model_cfg.FILTERS
         
-        if self.model_cfg.USE_ABSOLUTE_XYZI and self.input_channels > 0:
+        if self.input_channels > 0:
             self.conv0 = spconv.SparseSequential(
                 spconv_block(self.base_channels + self.input_channels, filters[0], kernel_size=3, padding=1, indice_key='subm0'),
             )
-        elif self.model_cfg.USE_ABSOLUTE_XYZI:
+        else:
             self.conv0 = spconv.SparseSequential(
                 spconv_block(self.base_channels, filters[0], kernel_size=3, padding=1, indice_key='subm0'),
             )
-        elif self.input_channels > 0:
-            self.conv0 = spconv.SparseSequential(
-                spconv_block(self.input_channels, filters[0], kernel_size=3, padding=1, indice_key='subm0'),
-            )
-        else:
-            raise NotImplementedError
         
         self.conv1 = spconv.SparseSequential(
             spconv_block(filters[0], filters[1], kernel_size=3, padding=1, indice_key='subm1'),
@@ -107,21 +101,16 @@ class VFE(nn.Module):
         for batch_idx in range(batch_size):
             batch_mask = batch_points[:, 0] == batch_idx
             this_points = batch_points[batch_mask, :] # (Ni, 8), Points of (batch_id, x, y, z, intensity, r, g, b)
-            if self.model_cfg.USE_ABSOLUTE_XYZI and self.input_channels > 0:
-                rv_features = batch_rv_features[batch_mask, :] # (Ni, input_channels)
-                voxels, coords, num_points_per_voxel = voxel_generator(torch.cat([this_points[:, 1:5], rv_features], dim=-1))
-            elif self.model_cfg.USE_ABSOLUTE_XYZI:
-                voxels, coords, num_points_per_voxel = voxel_generator(this_points[:, 1:5].contiguous())
-            elif self.input_channels > 0:
-                rv_features = batch_rv_features[batch_mask, :] # (Ni, input_channels)
-                voxels, coords, num_points_per_voxel = voxel_generator(torch.cat([this_points[:, 1:5], rv_features], dim=-1))
-                voxels = voxels[:, :, 4:]
-            else:
-                raise NotImplementedError
             
             # voxels: (num_voxels, max_points_per_voxel, num_point_features)
             # coords: (num_voxels, 3), Location of voxels, [zi, yi, xi], zi should be 0
             # num_points_per_voxel: (num_voxels), Number of points in each voxel
+            
+            if self.input_channels > 0:
+                rv_features = batch_rv_features[batch_mask, :] # (Ni, input_channels)
+                voxels, coords, num_points_per_voxel = voxel_generator(torch.cat([this_points[:, 1:5], rv_features], dim=-1))
+            else:
+                voxels, coords, num_points_per_voxel = voxel_generator(this_points[:, 1:5].contiguous())
             
             voxel_features = voxels.sum(dim=1, keepdim=False)
             normalizer = torch.clamp_min(num_points_per_voxel.view(-1, 1), min=1.0).type_as(voxel_features)

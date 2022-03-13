@@ -223,10 +223,4 @@ class ResNet(nn.Module):
         
         batch_dict['rv_features'] = batch_rv_features # (N1 + N2 + ..., num_rv_features)
         
-        if self.training:
-            batch_dict['seg_preds_for_training'] = batch_rv_features # (N1 + N2 + ..., num_rv_features)
-            
-        else:
-            batch_dict['seg_preds_for_testing'] = batch_rv_features # (N1 + N2 + ..., num_rv_features)
-        
         return batch_dict
