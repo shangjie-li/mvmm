@@ -116,8 +116,7 @@ class DRNet(nn.Module):
                 UpsampleDilatedResidualBlock(c_in_list[idx], upsample_filters[idx], use_interpolate[idx])
             )
         
-        self.num_rv_features = 4
-        self.conv_1x1 = nn.Conv2d(upsample_filters[-1], self.num_rv_features, kernel_size=1, stride=1, padding=0, bias=False)
+        self.num_rv_features = upsample_filters[-1]
     
     def forward(self, batch_dict, **kwargs):
         batch_points = batch_dict['colored_points'] # (N1 + N2 + ..., 8), Points of (batch_id, x, y, z, intensity, r, g, b)
@@ -177,7 +176,7 @@ class DRNet(nn.Module):
             
         for i in range(len(self.upsample_blocks)):
             x = self.upsample_blocks[i](x, skip_features[-i - 2])
-        batch_range_images = self.conv_1x1(x)
+        batch_range_images = x
         
         batch_rv_features = []
         batch_size = batch_points[:, 0].max().int().item() + 1

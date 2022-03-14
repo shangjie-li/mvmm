@@ -27,7 +27,7 @@
 | 20  | occupancy            | -                                 | 76.4, 64.3, 63.5 | 45.1, 35.3, 34.5 | 51.7, 36.2, 31.5 | 29ms |
 
 
-## Ablation Experiments for MVMM
+## Ablation Experiments for MVMM (1)
 
  * The 3D AP with 11 Recall Positions (R11) is used to evaluate the models. The latency is tested on a single 1080Ti GPU.
 
@@ -66,7 +66,7 @@
 | 44  | xyzri(nm)+rgb(nm) -> DualDRNet     | VFE(0-1-2-3-4-5)    | 75.6, 63.7, 63.0 | 44.3, 38.1, 33.9 | 53.9, 37.2, 32.4 | 49ms |
 
 
-## Ablation Experiments of data augmentation for MVMM with PFE
+## Ablation Experiments for MVMM (2)
 
  * The 3D AP with 11 Recall Positions (R11) is used to evaluate the models. The latency is tested on a single 1080Ti GPU.
 
@@ -80,7 +80,7 @@
 | 50  | xyzri(nm)+rgb(nm)    | sampling, flip, rotation, scaling | 87.1, 77.0, 75.3 | 51.9, 46.3, 43.4 | 74.5, 57.4, 55.4 | -    |
 
 
-## Ablation Experiments of rv backbones for MVMM
+## Ablation Experiments for MVMM (3)
 
  * The 3D AP with 11 Recall Positions (R11) is used to evaluate the models. The latency is tested on a single 1080Ti GPU.
 
@@ -98,7 +98,7 @@
 | 60  | rgb(nm) -> ResNet         | PFE(13, 64) | 3*5, ROP, COP  | 87.5, 77.0, 75.8 | 56.2, 50.9, 47.9 | 78.2, 57.9, 55.9 | -    |
 
 
-## Ablation Experiments of pv bridges for MVMM
+## Ablation Experiments for MVMM (4)
 
  * The 3D AP with 11 Recall Positions (R11) is used to evaluate the models. The latency is tested on a single 1080Ti GPU.
 
@@ -144,7 +144,7 @@
 | 104 | ResNet | loss=0(sm) -> VFE(4)                | SSD(64)   | 88.5, 77.8, 77.2 | 57.4, 54.3, 51.4 | 75.6, 58.9, 55.7 | -    |
 
 
-## Ablation Experiments of segmentation for MVMM with PFE(13, 64)
+## Ablation Experiments for MVMM (5)
 
  * The 3D AP with 11 Recall Positions (R11) is used to evaluate the models. The latency is tested on a single 1080Ti GPU.
 
@@ -158,7 +158,7 @@
 | 86  | xyzrirgb(nm) -> DRNet    | 94.3, 41.6, 24.2, 11.0 | 42.8 | 87.1, 76.8, 75.5 | 48.6, 44.9, 42.4 | 79.2, 59.5, 56.9 | -    |
 
 
-## Ablation Experiments of architecture of MVMM
+## Ablation Experiments for MVMM (6)
 
  * The 3D AP with 11 Recall Positions (R11) is used to evaluate the models. The latency is tested on a single 1080Ti GPU.
 
@@ -190,11 +190,37 @@
 | 128 | rgb(nm) -> ResNet -> 16 -> PFE(26, 64)                   | 86.9, 76.5, 75.1 | 54.0, 49.1, 47.5 | 79.2, 59.2, 56.9 | -    |
 | 129 | rgb(nm) -> DRNet -> 4 -> PFE(14, 64)                     | 86.5, 76.1, 74.7 | 53.4, 48.0, 46.0 | 74.7, 55.3, 53.7 | -    |
 | 130 | rgb(nm) -> DRNet -> 16 -> PFE(26, 64)                    | 86.7, 76.5, 75.4 | 52.2, 47.8, 45.7 | 73.7, 57.6, 55.3 | -    |
-| 131 | xyzrirgb(nm) -> ResNet -> 4 -> VFE(xyzi+4)               |
-| 132 | xyzrirgb(nm) -> DRNet -> 4 -> VFE(xyzi+4)                |
-| 133 | xyzri(nm) -> ResNet -> 4 -> VFE(xyzi+4)                  |
-| 134 | xyzri(nm) -> DRNet -> 4 -> VFE(xyzi+4)                   |
-| 135 | rgb(nm) -> ResNet -> 4 -> VFE(xyzi+4)                    |
-| 136 | rgb(nm) -> DRNet -> 4 -> VFE(xyzi+4)                     |
+| 131 | xyzrirgb(nm) -> ResNet -> 4 -> VFE(xyzi+4)               | 88.6, 78.0, 77.3 | 55.4, 53.5, 50.7 | 82.8, 67.2, 64.7 | -    |
+| 132 | xyzrirgb(nm) -> DRNet -> 4 -> VFE(xyzi+4)                | 88.4, 78.2, 77.4 | 55.4, 53.7, 50.9 | 80.6, 63.5, 60.9 | -    |
+| 133 | xyzri(nm) -> ResNet -> 4 -> VFE(xyzi+4)                  | 88.7, 78.1, 77.4 | 54.2, 52.7, 50.3 | 78.3, 64.1, 61.7 | -    |
+| 134 | xyzri(nm) -> DRNet -> 4 -> VFE(xyzi+4)                   | 88.3, 78.0, 77.3 | 55.3, 53.1, 50.3 | 79.5, 65.1, 61.7 | -    |
+| 135 | rgb(nm) -> ResNet -> 4 -> VFE(xyzi+4)                    | 88.4, 78.3, 77.6 | 55.3, 51.9, 49.2 | 78.4, 63.4, 61.3 | -    |
+| 136 | rgb(nm) -> DRNet -> 4 -> VFE(xyzi+4)                     | 88.6, 77.9, 77.1 | 56.6, 53.2, 50.7 | 80.7, 65.1, 62.2 | -    |
+| 137 | VFE(xyzi)                                                | 88.0, 77.8, 77.3 | 55.8, 53.7, 51.2 | 78.2, 63.7, 61.0 | -    |
+| 138 | PFE(10, 64)                                              | 86.6, 76.4, 75.1 | 48.8, 45.5, 43.2 | 76.7, 59.6, 56.1 | -    |
+| 147 | mVFE(xyzi)                                               | 88.4, 78.0, 77.4 | 59.2, 56.6, 53.2 | 80.4, 64.8, 62.5 | -    |
+| 148 | xyzrirgb(nm) -> ResNet -> mVFE(xyzi+4)                   |
+| 149 | xyzrirgb(nm) -> ResNet -> pfn(xyzi+4, 32) -> mVFE        |
+| 150 | xyzrirgb(nm) -> ResNet -> pfn(xyzi, 16), 16 -> mVFE      |
+| 151 | xyzrirgb(nm) -> ResNet -> 64, PFE(10, 64) -> 64          |
+| 152 | xyzrirgb(nm) -> ResNet -> 32, PFE(10, 32) -> 64          |
+| 153 | xyzrirgb(nm) -> ResNet -> 64, PFE(10, 64) -> 128         |
+
+
+## Ablation Experiments for MVMM (7)
+
+ * The 3D AP with 11 Recall Positions (R11) is used to evaluate the models. The latency is tested on a single 1080Ti GPU.
+
+| ID  | Model                                   | Sampling       | Car              | Pedestrian       | Cyclist          | Lat. |
+|:---:|:---------------------------------------:|:--------------:|:----------------:|:----------------:|:----------------:|:----:|
+| 139 | VFE(xyzi)                               | 3*15           | 87.5, 77.4, 76.9 | 54.8, 51.2, 49.5 | 75.5, 60.7, 59.1 | -    |
+| 140 | xyzrirgb(nm) -> ResNet -> VFE(xyzi+4)   | 3*15           | 88.1, 77.6, 77.3 | 55.8, 53.2, 49.5 | 76.6, 62.7, 61.1 | -    |
+| 141 | VFE(xyzi)                               | 3*10           |
+| 142 | xyzrirgb(nm) -> ResNet -> VFE(xyzi+4)   | 3*10           |
+| 143 | VFE(xyzi)                               | 3*5            |
+| 144 | xyzrirgb(nm) -> ResNet -> VFE(xyzi+4)   | 3*5            |
+| 145 | VFE(xyzi)                               | 3*0            |
+| 146 | xyzrirgb(nm) -> ResNet -> VFE(xyzi+4)   | 3*0            |
+
 
 

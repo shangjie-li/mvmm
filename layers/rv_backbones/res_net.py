@@ -124,8 +124,7 @@ class ResNet(nn.Module):
         self.encoder = Encoder(self.input_channels)
         self.decoder = Decoder(self.encoder.src_channels)
         
-        self.num_rv_features = 4
-        self.conv_1x1 = nn.Conv2d(self.decoder.output_channels, self.num_rv_features, kernel_size=1, stride=1, padding=0, bias=False)
+        self.num_rv_features = self.decoder.output_channels
     
     def forward(self, batch_dict, **kwargs):
         batch_points = batch_dict['colored_points'] # (N1 + N2 + ..., 8), Points of (batch_id, x, y, z, intensity, r, g, b)
@@ -179,7 +178,6 @@ class ResNet(nn.Module):
         
         src_features = self.encoder(batch_range_images)
         batch_range_images = self.decoder(src_features)
-        batch_range_images = self.conv_1x1(batch_range_images)
         
         batch_rv_features = []
         batch_size = batch_points[:, 0].max().int().item() + 1

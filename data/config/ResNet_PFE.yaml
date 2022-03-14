@@ -18,7 +18,7 @@ DATA_CONFIG:
     
     GET_ITEM_LIST: ['colored_points']
     SRC_FEATURE_LIST: ['x', 'y', 'z', 'intensity', 'r', 'g', 'b']
-    USED_FEATURE_LIST: ['x', 'y', 'z', 'range', 'intensity']
+    USED_FEATURE_LIST: ['x', 'y', 'z', 'range', 'intensity', 'r', 'g', 'b']
     
     DATA_AUGMENTOR:
         - NAME: gt_sampling
