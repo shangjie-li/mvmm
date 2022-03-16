@@ -7,22 +7,6 @@ from spconv.pytorch.utils import PointToVoxel
 from utils.spconv_utils import spconv
 
 
-class FCLayer(nn.Module):
-    def __init__(self, inp_channels, out_channels):
-        super().__init__()
-        
-        self.linear = nn.Linear(inp_channels, out_channels, bias=False)
-        self.norm = nn.BatchNorm1d(out_channels, eps=1e-3, momentum=0.01)
-        
-    def forward(self, inputs):
-        x = self.linear(inputs)
-        torch.backends.cudnn.enabled = False
-        x = self.norm(x)
-        torch.backends.cudnn.enabled = True
-        x = F.relu(x)
-        return x
-
-
 def spconv_block(inp_channels, out_channels, kernel_size=1, stride=1, padding=0, indice_key=None, conv_type='subm'):
     if conv_type == 'subm':
         return spconv.SparseSequential(
@@ -131,7 +115,7 @@ class VFE(nn.Module):
             voxel_features = voxels.sum(dim=1, keepdim=False)
             normalizer = torch.clamp_min(num_points_per_voxel.view(-1, 1), min=1.0).type_as(voxel_features)
             voxel_features /= normalizer
-            batch_voxels.append(voxel_features) # voxel_features: (num_voxels, input_channels)
+            batch_voxels.append(voxel_features) # voxel_features: (num_voxels, num_point_features)
             
             coords = torch.cat([torch.ones((coords.shape[0], 1), dtype=coords.dtype, device=coords.device) * batch_idx, coords], dim=-1)
             batch_coords.append(coords) # coords: (num_voxels, 4), [batch_id, zi, yi, xi]

@@ -7,109 +7,72 @@ from collections import OrderedDict
 from utils import loss_utils
 
 
-class BottleNeck(nn.Module):
-    expansion = 4
-    
-    def __init__(self, in_planes, planes, stride=1, downsample=None):
+class DilatedResidualBlock(nn.Module):
+    def __init__(self, inp_channels, out_channels):
         super().__init__()
         
-        self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(planes)
+        self.conv_1x1_1 = nn.Conv2d(inp_channels, out_channels, kernel_size=1, stride=1, padding=0, bias=False)
+        self.bn1 = nn.BatchNorm2d(out_channels)
         
-        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(planes)
+        self.conv_d1 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1, dilation=1, bias=False)
+        self.bn_d1 = nn.BatchNorm2d(out_channels)
+        self.conv_d2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=2, dilation=2, bias=False)
+        self.bn_d2 = nn.BatchNorm2d(out_channels)
+        self.conv_d3 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=3, dilation=3, bias=False)
+        self.bn_d3 = nn.BatchNorm2d(out_channels)
         
-        self.conv3 = nn.Conv2d(planes, planes * 4, kernel_size=1, bias=False)
-        self.bn3 = nn.BatchNorm2d(planes * 4)
-        
-        self.relu = nn.ReLU(inplace=True)
-        self.downsample = downsample
-        self.stride = stride
+        self.conv_1x1_2 = nn.Conv2d(out_channels * 3, out_channels, kernel_size=1, stride=1, padding=0, bias=False)
+        self.bn2 = nn.BatchNorm2d(out_channels)
     
-    def forward(self, x):
-        residual = x
-        out = self.relu(self.bn1(self.conv1(x)))
-        out = self.relu(self.bn2(self.conv2(out)))
-        out = self.bn3(self.conv3(out))
+    def forward(self, inputs):
+        x0 = self.bn1(self.conv_1x1_1(inputs))
         
-        if self.downsample is not None:
-            residual = self.downsample(x)
+        x1 = self.bn_d1(self.conv_d1(x0))
+        x2 = self.bn_d2(self.conv_d2(x1))
+        x3 = self.bn_d3(self.conv_d3(x2))
         
-        out += residual
-        out = self.relu(out)
+        x = torch.cat([x1, x2, x3], dim=1)
+        x = self.bn2(self.conv_1x1_2(x))
+        x += x0
         
-        return out
+        return x
 
 
-class Encoder(nn.Module):
-    def __init__(self, input_channels):
-        super().__init__()
-        self.input_channels = input_channels
-        
-        self.num_blocks = [3, 4, 6, 3]
-        self.in_planes = 64
-        
-        self.layers = nn.ModuleList()
-        self.src_channels = []
-        
-        self.conv1 = nn.Conv2d(self.input_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
-        self.bn1 = nn.BatchNorm2d(64)
-        self.relu = nn.ReLU(inplace=True)
-        
-        self._make_layers(BottleNeck, 64, self.num_blocks[0], stride=1)
-        self._make_layers(BottleNeck, 128, self.num_blocks[1], stride=2)
-        self._make_layers(BottleNeck, 256, self.num_blocks[2], stride=2)
-        self._make_layers(BottleNeck, 512, self.num_blocks[3], stride=2)
-    
-    def _make_layers(self, block, planes, num_blocks, stride):
-        downsample = None
-        if stride != 1 or self.in_planes != planes * block.expansion:
-            downsample = nn.Sequential(
-                nn.Conv2d(self.in_planes, planes * block.expansion, kernel_size=1, stride=stride, bias=False),
-                nn.BatchNorm2d(planes * block.expansion),
-            )
-        
-        layers = []
-        layers.append(block(self.in_planes, planes, stride, downsample))
-        self.in_planes = planes * block.expansion
-        
-        for i in range(1, num_blocks):
-            layers.append(block(self.in_planes, planes))
-        
-        self.layers.append(nn.Sequential(*layers))
-        self.src_channels.append(planes * block.expansion)
-    
-    def forward(self, x):
-        x = self.relu(self.bn1(self.conv1(x)))
-        
-        out = []
-        for layer in self.layers:
-            x = layer(x)
-            out.append(x)
-        
-        return out
-
-
-class Decoder(nn.Module):
-    def __init__(self, src_channels):
+class DownsampleDilatedResidualBlock(nn.Module):
+    def __init__(self, inp_channels, out_channels, use_pool=True):
         super().__init__()
         
-        self.output_channels = 64
-        self.lat_layers = nn.ModuleList()
-        for c in reversed(src_channels):
-            self.lat_layers.append(nn.Conv2d(c, self.output_channels, kernel_size=1))
-    
-    def forward(self, src_features):
-        x = self.lat_layers[0](src_features[-1])
-        num = len(src_features)
-        for i in range(1, num):
-            lat_features = self.lat_layers[i](src_features[-i - 1])
-            x = F.interpolate(x, scale_factor=2, mode='bilinear') + lat_features
+        self.drb = DilatedResidualBlock(inp_channels, out_channels)
+        self.use_pool = use_pool
         
-        return F.interpolate(x, scale_factor=2, mode='bilinear')
+    def forward(self, inputs):
+        x = self.drb(inputs)
+        
+        if self.use_pool:
+            x = F.avg_pool2d(x, kernel_size=(2, 2), stride=(2, 2))
+        
+        return x
 
 
-class ResNet(nn.Module):
+class UpsampleDilatedResidualBlock(nn.Module):
+    def __init__(self, inp_channels, out_channels, use_interpolate=True):
+        super().__init__()
+        
+        self.drb = DilatedResidualBlock(inp_channels * 2, out_channels)
+        self.use_interpolate = use_interpolate
+    
+    def forward(self, inputs, skip_features):
+        if self.use_interpolate:
+            x = F.interpolate(inputs, scale_factor=2, mode='bilinear')
+        else:
+            x = inputs
+        
+        x = self.drb(torch.cat([x, skip_features], dim=1))
+        
+        return x
+
+
+class DRNet(nn.Module):
     def __init__(self, model_cfg, input_channels, **kwargs):
         super().__init__()
         self.model_cfg = model_cfg
@@ -121,12 +84,41 @@ class ResNet(nn.Module):
         self.lidar_fov_up = self.model_cfg.LIDAR_FOV_UP * self.pi / 180
         self.lidar_fov_down = self.model_cfg.LIDAR_FOV_DOWN * self.pi / 180
         
-        self.encoder = Encoder(self.input_channels)
-        self.decoder = Decoder(self.encoder.src_channels)
+        if self.model_cfg.get('DOWNSAMPLE_STRIDES', None) is not None:
+            assert len(self.model_cfg.DOWNSAMPLE_STRIDES) == len(self.model_cfg.DOWNSAMPLE_FILTERS) == len(self.model_cfg.USE_POOL)
+            downsample_strides = self.model_cfg.DOWNSAMPLE_STRIDES
+            downsample_filters = self.model_cfg.DOWNSAMPLE_FILTERS
+            use_pool = self.model_cfg.USE_POOL
+        else:
+            raise NotImplementedError
+        
+        if self.model_cfg.get('UPSAMPLE_STRIDES', None) is not None:
+            assert len(self.model_cfg.UPSAMPLE_STRIDES) == len(self.model_cfg.UPSAMPLE_FILTERS) == len(self.model_cfg.USE_INTERPOLATE)
+            upsample_strides = self.model_cfg.UPSAMPLE_STRIDES
+            upsample_filters = self.model_cfg.UPSAMPLE_FILTERS
+            use_interpolate = self.model_cfg.USE_INTERPOLATE
+        else:
+            raise NotImplementedError
+        
+        num_downsample_blocks = len(downsample_filters)
+        c_in_list = [self.input_channels, *downsample_filters[:-1]]
+        self.downsample_blocks = nn.ModuleList()
+        for idx in range(num_downsample_blocks):
+            self.downsample_blocks.append(
+                DownsampleDilatedResidualBlock(c_in_list[idx], downsample_filters[idx], use_pool[idx])
+            )
+        
+        num_upsample_blocks = len(upsample_filters)
+        c_in_list = [downsample_filters[-1], *upsample_filters[:-1]]
+        self.upsample_blocks = nn.ModuleList()
+        for idx in range(num_upsample_blocks):
+            self.upsample_blocks.append(
+                UpsampleDilatedResidualBlock(c_in_list[idx], upsample_filters[idx], use_interpolate[idx])
+            )
         
         assert len(self.model_cfg.FILTERS) > 0
         self.num_rv_features = self.model_cfg.FILTERS[-1]
-        self.conv_1x1 = nn.Conv2d(self.decoder.output_channels, self.num_rv_features, kernel_size=1)
+        self.conv_1x1 = nn.Conv2d(upsample_filters[-1], self.num_rv_features, kernel_size=1)
     
     def forward(self, batch_dict, **kwargs):
         batch_points = batch_dict['colored_points'] # (N1 + N2 + ..., 8), Points of (batch_id, x, y, z, intensity, r, g, b)
@@ -178,9 +170,15 @@ class ResNet(nn.Module):
         batch_point_vs = torch.cat(batch_point_vs, dim=0)
         batch_range_images = torch.stack(batch_range_images, dim=0)
         
-        src_features = self.encoder(batch_range_images)
-        batch_range_images = self.decoder(src_features)
-        batch_range_images = self.conv_1x1(batch_range_images)
+        x = batch_range_images
+        skip_features = []
+        for i in range(len(self.downsample_blocks)):
+            x = self.downsample_blocks[i](x)
+            skip_features.append(x)
+            
+        for i in range(len(self.upsample_blocks)):
+            x = self.upsample_blocks[i](x, skip_features[-i - 2])
+        batch_range_images = self.conv_1x1(x)
         
         batch_rv_features = []
         batch_size = batch_points[:, 0].max().int().item() + 1

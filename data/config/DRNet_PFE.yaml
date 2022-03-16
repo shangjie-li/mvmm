@@ -5,7 +5,7 @@ DATA_CONFIG:
     DATASET: 'KittiDataset'
     DATA_PATH: 'data/kitti'
     
-    POINT_CLOUD_RANGE: [0, -40, -3, 70.4, 40, 1]
+    POINT_CLOUD_RANGE: [0, -39.68, -3, 69.12, 39.68, 1]
     
     DATA_SPLIT: {
         'train': train,
@@ -45,30 +45,38 @@ MODEL:
     NAME: MVMM
 
     RV_BACKBONE:
-        NAME: ResNet
+        NAME: DRNet
         FULL_SIZE_OF_RANGE_IMAGE: [64, 2048]
         FRONT_SIZE_OF_RANGE_IMAGE: [48, 512]
         LIDAR_FOV_UP: 2
         LIDAR_FOV_DOWN: 24.8
-        FILTERS: [4]
+        DOWNSAMPLE_STRIDES: [1, 1, 2, 2, 2, 2]
+        DOWNSAMPLE_FILTERS: [32, 64, 128, 128, 256, 256]
+        USE_POOL: [False, False, True, True, True, True]
+        UPSAMPLE_STRIDES: [2, 2, 2, 2]
+        UPSAMPLE_FILTERS: [128, 128, 64, 64]
+        USE_INTERPOLATE: [True, True, True, True]
+        FILTERS: [64]
 
     PV_BRIDGE:
-        NAME: VFE
-        VOXEL_SIZE: [0.05, 0.05, 0.1]
-        MAX_NUMBER_OF_VOXELS: {
+        NAME: PFE
+        PILLAR_SIZE: [0.16, 0.16, 4]
+        MAX_NUMBER_OF_PILLARS: {
             'train': 16000,
             'test': 40000
         }
-        MAX_POINTS_PER_VOXEL: 5
-        FILTERS: [32, 32, 64, 64, 128, 128]
+        MAX_POINTS_PER_PILLAR: 32
+        USE_RELATIVE_XYZ_TO_CLUSTER: True
+        USE_RELATIVE_XYZ_TO_CENTER: True
+        FILTERS: [64]
 
     BEV_BACKBONE:
         NAME: BaseBEVBackbone
-        NUM_LAYERS: [5, 5]
-        DOWNSAMPLE_STRIDES: [1, 2]
-        DOWNSAMPLE_FILTERS: [128, 256]
-        UPSAMPLE_STRIDES: [1, 2]
-        UPSAMPLE_FILTERS: [256, 256]
+        NUM_LAYERS: [3, 5, 5]
+        DOWNSAMPLE_STRIDES: [2, 2, 2]
+        DOWNSAMPLE_FILTERS: [64, 128, 256]
+        UPSAMPLE_STRIDES: [1, 2, 4]
+        UPSAMPLE_FILTERS: [128, 128, 128]
 
     DENSE_HEAD:
         NAME: AnchorHeadSingle
@@ -82,7 +90,7 @@ MODEL:
                 'anchor_sizes': [[3.9, 1.6, 1.56]],
                 'anchor_rotations': [0, 1.57],
                 'anchor_bottom_heights': [-1.78],
-                'feature_map_stride': 8,
+                'feature_map_stride': 2,
                 'matched_threshold': 0.6,
                 'unmatched_threshold': 0.45
             },
@@ -91,7 +99,7 @@ MODEL:
                 'anchor_sizes': [[0.8, 0.6, 1.73]],
                 'anchor_rotations': [0, 1.57],
                 'anchor_bottom_heights': [-0.6],
-                'feature_map_stride': 8,
+                'feature_map_stride': 2,
                 'matched_threshold': 0.5,
                 'unmatched_threshold': 0.35
             },
@@ -100,7 +108,7 @@ MODEL:
                 'anchor_sizes': [[1.76, 0.6, 1.73]],
                 'anchor_rotations': [0, 1.57],
                 'anchor_bottom_heights': [-0.6],
-                'feature_map_stride': 8,
+                'feature_map_stride': 2,
                 'matched_threshold': 0.5,
                 'unmatched_threshold': 0.35
             }

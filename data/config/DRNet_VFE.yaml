@@ -45,11 +45,17 @@ MODEL:
     NAME: MVMM
 
     RV_BACKBONE:
-        NAME: ResNet
+        NAME: DRNet
         FULL_SIZE_OF_RANGE_IMAGE: [64, 2048]
         FRONT_SIZE_OF_RANGE_IMAGE: [48, 512]
         LIDAR_FOV_UP: 2
         LIDAR_FOV_DOWN: 24.8
+        DOWNSAMPLE_STRIDES: [1, 1, 2, 2, 2, 2]
+        DOWNSAMPLE_FILTERS: [32, 64, 128, 128, 256, 256]
+        USE_POOL: [False, False, True, True, True, True]
+        UPSAMPLE_STRIDES: [2, 2, 2, 2]
+        UPSAMPLE_FILTERS: [128, 128, 64, 64]
+        USE_INTERPOLATE: [True, True, True, True]
         FILTERS: [4]
 
     PV_BRIDGE:
