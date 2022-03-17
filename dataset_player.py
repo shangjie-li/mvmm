@@ -4,26 +4,25 @@ from pathlib import Path
 import time
 import copy
 
-from utils import open3d_vis_utils as V
-
 import numpy as np
 import torch
 
 from data import cfg, cfg_from_yaml_file
 from data import KittiDataset
 from utils import common_utils
+from utils import open3d_vis_utils as V
 
 
 def parse_config():
     parser = argparse.ArgumentParser(description='arg parser')
-    parser.add_argument('--cfg_file', type=str, default='data/config/ResNet_PFE.yaml',
+    parser.add_argument('--cfg_file', type=str, default='data/config/ResNet_VFE.yaml',
         help='specify the config for training')
     parser.add_argument('--training', action='store_true', default=False,
         help='whether to use training mode')
     parser.add_argument('--data_augmentation', action='store_true', default=False,
         help='whether to use data augmentation')
-    parser.add_argument('--show_point_labels', action='store_true', default=False,
-        help='whether to show point labels')
+    parser.add_argument('--show_boxes', action='store_true', default=False,
+        help='whether to show boxes')
 
     args = parser.parse_args()
 
@@ -58,33 +57,22 @@ if __name__ == '__main__':
                 print(val)
         print()
         
-        if args.show_point_labels:
+        if set(['r', 'g', 'b']).issubset(set(dataset.used_feature_list)):
             V.draw_scenes(
                 points=data_dict['colored_points'][:, 0:3],
-                ref_boxes=data_dict['gt_boxes'][:, :7],
+                ref_boxes=data_dict['gt_boxes'][:, :7] if args.show_boxes else None,
                 ref_scores=None,
                 ref_labels=data_dict['gt_boxes'][:, 7].astype(np.int),
-                point_labels=data_dict['point_labels'],
+                point_colors=data_dict['colored_points'][:, -3:],
+                point_size=4.0
+            )
+        else:
+            V.draw_scenes(
+                points=data_dict['colored_points'][:, 0:3],
+                ref_boxes=data_dict['gt_boxes'][:, :7] if args.show_boxes else None,
+                ref_scores=None,
+                ref_labels=data_dict['gt_boxes'][:, 7].astype(np.int),
+                point_colors=np.ones((data_dict['colored_points'].shape[0], 3)),
                 point_size=2.0
             )
-            
-        else:
-            if set(['r', 'g', 'b']).issubset(set(dataset.used_feature_list)):
-                V.draw_scenes(
-                    points=data_dict['colored_points'][:, 0:3],
-                    ref_boxes=data_dict['gt_boxes'][:, :7],
-                    ref_scores=None,
-                    ref_labels=data_dict['gt_boxes'][:, 7].astype(np.int),
-                    point_colors=data_dict['colored_points'][:, -3:],
-                    point_size=4.0
-                )
-            else:
-                V.draw_scenes(
-                    points=data_dict['colored_points'][:, 0:3],
-                    ref_boxes=data_dict['gt_boxes'][:, :7],
-                    ref_scores=None,
-                    ref_labels=data_dict['gt_boxes'][:, 7].astype(np.int),
-                    point_colors=np.ones((data_dict['colored_points'].shape[0], 3)),
-                    point_size=2.0
-                )
         

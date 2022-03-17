@@ -166,9 +166,13 @@ class ResNet(nn.Module):
             max_u = int(min_u + self.front_size[1])
             front_range_image = full_range_image[:, 0:self.front_size[0], min_u:max_u]
             
-            # ~ import matplotlib.pyplot as plt
-            # ~ plt.imshow(front_range_image[:3, :, :].permute(1, 2, 0).cpu().numpy())
-            # ~ plt.show()
+            #~ import matplotlib.pyplot as plt
+            #~ import time
+            #~ fig = plt.figure(figsize=(8, 2))
+            #~ plt.imshow(front_range_image[-3:, :, :].permute(1, 2, 0).cpu().numpy())
+            #~ plt.axis('off')
+            #~ plt.show()
+            #~ fig.savefig(time.asctime(time.localtime(time.time())), dpi=200)
             
             batch_point_us.append(us[:, None])
             batch_point_vs.append(vs[:, None])
@@ -189,19 +193,6 @@ class ResNet(nn.Module):
             us = batch_point_us[batch_mask, :].squeeze()
             vs = batch_point_vs[batch_mask, :].squeeze()
             range_image = batch_range_images[batch_idx, ...]
-            
-            # ~ import matplotlib.pyplot as plt
-            # ~ import time
-            # ~ fig = plt.figure(figsize=(16, 3))
-            # ~ fig.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.95, wspace=0.05, hspace=0.05)
-            # ~ range_image_sm = F.softmax(range_image.detach(), dim=0)
-            # ~ for i in range(0, 4):
-                # ~ img = range_image_sm[i:i + 1, :, :].permute(1, 2, 0).cpu().numpy()
-                # ~ plt.subplot(2, 2, i + 1)
-                # ~ plt.imshow(img)
-                # ~ plt.axis('off')
-            # ~ plt.show()
-            # ~ fig.savefig(time.asctime(time.localtime(time.time())), dpi=200)
             
             full_range_image = torch.zeros(
                 (self.num_rv_features, self.full_size[0], self.full_size[1]),

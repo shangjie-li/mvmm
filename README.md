@@ -53,15 +53,15 @@ Implementation of MVMM in PyTorch for KITTI 3D Object Detetcion
    ```
    # This will create gt_database dir and info files in mvmm/data/kitti.
    cd mvmm
-   python -m data.kitti_dataset create_kitti_infos data/config/ResNet_PFE.yaml
+   python -m data.kitti_dataset create_kitti_infos data/config/ResNet_VFE.yaml
    ```
  - Display the dataset
    ```
    # Display the training dataset with data augmentation
-   python dataset_player.py --training --data_augmentation
+   python dataset_player.py --training --data_augmentation --show_boxes
    
    # Display the testing dataset
-   python dataset_player.py
+   python dataset_player.py --show_boxes
    ```
 
 ## Demo

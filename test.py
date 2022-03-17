@@ -19,7 +19,7 @@ from utils import eval_utils
 
 def parse_config():
     parser = argparse.ArgumentParser(description='arg parser')
-    parser.add_argument('--cfg_file', type=str, default='data/config/ResNet_PFE.yaml', help='specify the config for training')
+    parser.add_argument('--cfg_file', type=str, default='data/config/ResNet_VFE.yaml', help='specify the config for training')
 
     parser.add_argument('--workers', type=int, default=4, help='number of workers for dataloader')
     parser.add_argument('--extra_tag', type=str, default='', help='extra tag for this experiment')
