@@ -238,3 +238,48 @@
 | 160 | DRNet_PFE(xyzrirgb)  | sampling, flip, rotation, scaling | 87.3, 76.6, 75.4 | 54.8, 50.3, 47.2 | 77.0, 58.5, 56.6 | 34ms |
 
 
+## Ablation Experiments for MVMM (9)
+
+ * The 3D AP with 11 Recall Positions (R11) is used to evaluate the models. The latency is tested on a single 1080Ti GPU.
+
+| ID  | Model                | Data augmentation                 | Car              | Pedestrian       | Cyclist          | Lat. |
+|:---:|:--------------------:|:---------------------------------:|:----------------:|:----------------:|:----------------:|:----:|
+| 161 | Baseline_VFE         | sampling, flip, rotation, scaling | 88.4, 78.0, 77.3 | 54.3, 52.2, 49.0 | 76.5, 62.4, 59.8 | -    |
+| 162 | Baseline_VFE         | sampling, flip, rotation, scaling | 88.1, 77.8, 77.1 | 57.8, 54.5, 51.5 | 81.4, 65.0, 62.7 | -    |
+| 163 | Baseline_VFE         | sampling, flip, rotation, scaling | 88.2, 78.0, 77.3 | 55.1, 53.9, 51.2 | 76.7, 62.4, 59.7 | -    |
+| 164 | ResNet_VFE(xyzrirgb) | sampling, flip, rotation, scaling | 88.7, 78.3, 77.7 | 56.5, 54.9, 52.1 | 82.3, 66.6, 63.2 | -    |
+| 165 | ResNet_VFE(xyzrirgb) | sampling, flip, rotation, scaling | 88.8, 78.2, 77.5 | 55.1, 54.2, 51.1 | 79.1, 65.0, 61.9 | -    |
+| 166 | ResNet_VFE(xyzrirgb) | sampling, flip, rotation, scaling | 89.0, 78.3, 77.6 | 55.8, 53.2, 49.5 | 77.8, 64.6, 61.6 | -    |
+| 167 | ResNet_VFE(xyzri)    | sampling, flip, rotation, scaling | 88.8, 78.5, 77.7 | 54.6, 53.2, 50.7 | 79.2, 65.0, 61.4 | -    |
+| 168 | ResNet_VFE(xyzri)    | sampling, flip, rotation, scaling | 88.8, 78.3, 77.6 | 55.4, 53.4, 50.6 | 79.5, 64.8, 61.9 | -    |
+| 169 | ResNet_VFE(xyzri)    | sampling, flip, rotation, scaling | 88.6, 78.3, 77.6 | 54.9, 53.5, 49.2 | 80.5, 65.5, 62.6 | -    |
+| 170 | ResNet_VFE(rgb)      | sampling, flip, rotation, scaling | 88.6, 78.1, 77.5 | 58.1, 54.9, 51.6 | 80.5, 65.1, 62.7 | -    |
+| 171 | ResNet_VFE(rgb)      | sampling, flip, rotation, scaling | 88.6, 78.1, 77.6 | 57.2, 53.8, 51.3 | 83.8, 68.1, 65.8 | -    |
+| 172 | ResNet_VFE(rgb)      | sampling, flip, rotation, scaling | 88.8, 78.4, 77.5 | 59.1, 56.2, 52.7 | 76.3, 63.3, 60.1 | -    |
+| 173 | Baseline_PFE         | sampling, flip, rotation, scaling | 86.6, 76.5, 75.3 | 50.8, 46.7, 44.4 | 75.7, 57.4, 54.6 | -    |
+| 174 | ResNet_PFE(xyzrirgb) | sampling, flip, rotation, scaling | 87.0, 76.4, 75.4 | 56.3, 52.3, 49.2 | 77.4, 58.6, 55.7 | -    |
+| 175 | DRNet_PFE(xyzrirgb)  | sampling, flip, rotation, scaling | 87.2, 76.4, 74.6 | 57.2, 52.5, 49.2 | 77.1, 58.2, 55.0 | -    |
+| 176 | DRNet_VFE(xyzrirgb)  | sampling, flip, rotation, scaling | 88.8, 78.3, 77.6 | 57.8, 54.4, 51.7 | 80.2, 64.7, 63.2 | -    |
+| 177 | ResNet_VFE(xyzrirgb) | -                                 | 73.2, 64.6, 64.0 | 46.4, 39.9, 34.9 | 54.2, 36.8, 32.4 | -    |
+| 178 | ResNet_VFE(xyzrirgb) | sampling                          | 86.8, 77.0, 76.2 | 58.2, 54.5, 50.3 | 79.4, 62.1, 59.8 | -    |
+| 179 | ResNet_VFE(xyzrirgb) | flip                              | 81.6, 71.8, 66.6 | 47.0, 40.8, 38.6 | 58.2, 45.2, 40.6 | -    |
+| 180 | ResNet_VFE(xyzrirgb) | rotation                          | 86.3, 75.6, 68.5 | 51.4, 45.2, 41.4 | 65.6, 49.8, 45.4 | -    |
+| 181 | ResNet_VFE(xyzrirgb) | scaling                           | 81.1, 72.0, 66.6 | 46.4, 39.8, 34.6 | 62.9, 45.7, 44.7 | -    |
+| 182 | ResNet_VFE(xyzrirgb) | sampling, flip                    | 88.2, 77.4, 76.5 | 57.3, 53.1, 49.7 | 79.8, 62.4, 59.0 | -    |
+| 183 | ResNet_VFE(xyzrirgb) | sampling, flip, rotation          | 88.7, 78.3, 77.5 | 56.3, 54.3, 50.5 | 71.0, 58.4, 55.2 | -    |
+| 184 | Baseline_PFE         | sampling, flip, rotation, scaling | 87.1, 76.4, 75.1 | 55.7, 50.1, 47.6 | 78.6, 58.7, 56.1 | -    |
+| 185 | Baseline_PFE         | sampling, flip, rotation, scaling | 87.0, 76.6, 75.7 | 50.1, 46.4, 43.9 | 77.8, 59.0, 57.0 | -    |
+| 186 | Baseline_PFE         | sampling, flip, rotation, scaling | 86.7, 76.3, 74.9 | 53.3, 48.2, 45.6 | 70.6, 55.1, 52.1 | -    |
+| 187 | ResNet_PFE(xyzrirgb) | sampling, flip, rotation, scaling | 87.0, 76.5, 75.5 | 57.2, 52.9, 49.4 | 77.8, 59.5, 57.2 | -    |
+| 188 | ResNet_PFE(xyzrirgb) | sampling, flip, rotation, scaling | 86.9, 76.4, 75.2 | 55.4, 51.6, 48.4 | 74.2, 57.8, 55.9 | -    |
+| 189 | ResNet_PFE(xyzrirgb) | sampling, flip, rotation, scaling | 87.3, 76.7, 75.8 | 58.0, 53.1, 50.2 | 78.0, 58.2, 56.0 | -    |
+| 190 | ResNet_PFE(xyzri)    | sampling, flip, rotation, scaling | 86.7, 76.4, 75.5 | 56.6, 51.8, 49.0 | 76.7, 58.2, 56.0 | -    |
+| 191 | ResNet_PFE(xyzri)    | sampling, flip, rotation, scaling | 87.1, 76.8, 75.9 | 57.2, 52.6, 49.3 | 76.7, 58.4, 55.8 | -    |
+| 192 | ResNet_PFE(xyzri)    | sampling, flip, rotation, scaling | 87.0, 76.7, 75.8 | 54.8, 50.7, 47.6 | 79.1, 58.8, 56.7 | -    |
+| 193 | ResNet_PFE(rgb)      | sampling, flip, rotation, scaling | 87.3, 76.4, 75.5 | 58.1, 53.4, 50.3 | 76.1, 57.2, 55.2 | -    |
+| 194 | ResNet_PFE(rgb)      | sampling, flip, rotation, scaling | 87.2, 76.4, 75.0 | 54.3, 49.7, 47.5 | 80.1, 60.4, 57.5 | -    |
+| 195 | ResNet_PFE(rgb)      | sampling, flip, rotation, scaling | 87.3, 76.8, 75.8 | 59.3, 55.1, 51.4 | 80.3, 60.2, 57.3 | -    |
+
+
+
+
