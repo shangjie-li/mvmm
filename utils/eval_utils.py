@@ -58,23 +58,15 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
             pred_dicts, ret_dict = model(batch_dict)
             if display:
                 if set(['r', 'g', 'b']).issubset(set(dataset.used_feature_list)):
-                    V.draw_scenes(
-                        points=batch_dict['colored_points'][:, 1:4].cpu().numpy(),
-                        ref_boxes=pred_dicts[0]['pred_boxes'],
-                        ref_scores=pred_dicts[0]['pred_scores'],
-                        ref_labels=pred_dicts[0]['pred_labels'],
-                        point_colors=batch_dict['colored_points'][:, -3:].cpu().numpy(),
-                        point_size=4.0
-                    )
+                    point_colors = batch_dict['colored_points'][:, -3:]
                 else:
-                    V.draw_scenes(
-                        points=batch_dict['colored_points'][:, 1:4].cpu().numpy(),
-                        ref_boxes=pred_dicts[0]['pred_boxes'],
-                        ref_scores=pred_dicts[0]['pred_scores'],
-                        ref_labels=pred_dicts[0]['pred_labels'],
-                        point_colors=np.ones((batch_dict['colored_points'].shape[0], 3)),
-                        point_size=2.0
-                    )
+                    point_colors = None
+                V.draw_scenes(
+                    points=batch_dict['colored_points'][:, 1:4],
+                    ref_boxes=pred_dicts[0]['pred_boxes'],
+                    ref_labels=[class_names[j - 1] for j in pred_dicts[0]['pred_labels'].cpu().numpy().astype(np.int)],
+                    point_colors=point_colors,
+                )
     
         disp_dict = {}
 

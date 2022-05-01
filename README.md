@@ -31,6 +31,7 @@ Implementation of MVMM in PyTorch for KITTI 3D Object Detetcion
    pip install mayavi
    pip install pyqt5
    pip install open3d-python
+   pip install opencv-python
    ```
 
 ## KITTI3D Dataset (41.5GB)
@@ -67,11 +68,11 @@ Implementation of MVMM in PyTorch for KITTI 3D Object Detetcion
 ## Demo
  - Run the demo with a pretrained model
    ```
-   # Run on a single file
-   python demo.py --ckpt=path_to_your_ckpt --data_path=data/kitti/training/velodyne/000008.bin
+   # Run on the testing dataset
+   python demo.py --ckpt=path_to_your_ckpt
    
-   # Run on a folder
-   python demo.py --ckpt=path_to_your_ckpt --data_path=data/kitti/training/velodyne
+   # Run on a single file from the testing dataset
+   python demo.py --ckpt=path_to_your_ckpt --sample_idx=000008
    ```
 
 ## Training
@@ -83,9 +84,9 @@ Implementation of MVMM in PyTorch for KITTI 3D Object Detetcion
 ## Evaluation
  - Run the command below to evaluate
    ```
-   # Run on the dataset
+   # Run on the testing dataset
    python test.py --ckpt=path_to_your_ckpt
    
-   # Run on the dataset and display
+   # Run on the testing dataset and display
    python test.py --ckpt=path_to_your_ckpt --display
    ```

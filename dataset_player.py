@@ -58,21 +58,14 @@ if __name__ == '__main__':
         print()
         
         if set(['r', 'g', 'b']).issubset(set(dataset.used_feature_list)):
-            V.draw_scenes(
-                points=data_dict['colored_points'][:, 0:3],
-                ref_boxes=data_dict['gt_boxes'][:, :7] if args.show_boxes else None,
-                ref_scores=None,
-                ref_labels=data_dict['gt_boxes'][:, 7].astype(np.int),
-                point_colors=data_dict['colored_points'][:, -3:],
-                point_size=4.0
-            )
+            point_colors = data_dict['colored_points'][:, -3:]
         else:
-            V.draw_scenes(
-                points=data_dict['colored_points'][:, 0:3],
-                ref_boxes=data_dict['gt_boxes'][:, :7] if args.show_boxes else None,
-                ref_scores=None,
-                ref_labels=data_dict['gt_boxes'][:, 7].astype(np.int),
-                point_colors=np.ones((data_dict['colored_points'].shape[0], 3)),
-                point_size=2.0
-            )
+            point_colors = None
+        V.draw_scenes(
+            points=data_dict['colored_points'][:, 0:3],
+            ref_boxes=data_dict['gt_boxes'][:, :7] if args.show_boxes else None,
+            ref_labels=[cfg.CLASS_NAMES[j - 1] for j in data_dict['gt_boxes'][:, 7].astype(np.int)],
+            point_colors=point_colors,
+            window_name=data_dict['frame_id'],
+        )
         
