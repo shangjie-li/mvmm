@@ -295,6 +295,11 @@
 | 209 | ResNet_VFE(xyzri)    | sampling, flip, rotation, scaling | -                | 56.8, 53.7, 49.3 | 79.4, 63.5, 61.8 | -    |
 | 210 | ResNet_VFE(rgb)      | sampling, flip, rotation, scaling | -                | 54.9, 52.7, 49.8 | 84.1, 65.9, 63.7 | -    |
 | 211 | ResNet_VFE(rgb)      | sampling, flip, rotation, scaling | -                | 57.8, 53.8, 50.7 | 81.9, 64.7, 61.8 | -    |
+| 212 | ResNet_VFE(xyzrirgb) | -                                 | 77.6, 64.9, 65.2 | -                | -                | -    |
+| 213 | ResNet_VFE(xyzrirgb) | flip                              | 81.1, 71.9, 66.6 | -                | -                | -    |
+| 214 | ResNet_VFE(xyzrirgb) | flip, rotation                    | 87.4, 76.8, 74.4 | -                | -                | -    |
+| 215 | ResNet_VFE(xyzrirgb) | flip, rotation, scaling           | 88.0, 77.1, 75.7 | -                | -                | -    |
+| 216 | ResNet_PFE(xyzrirgb) | sampling, flip, rotation, scaling | 87.8, 77.3, 76.3 | -                | -                | -    |
 
 
 
