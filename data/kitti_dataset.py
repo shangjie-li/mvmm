@@ -355,10 +355,12 @@ class KittiDataset(torch_data.Dataset):
 
                     for idx in range(len(bbox)):
                         print('%s -1 -1 %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f'
-                              % (single_pred_dict['name'][idx], single_pred_dict['alpha'][idx],
+                              % (single_pred_dict['name'][idx],
+                                 common_utils.normalize_angle(single_pred_dict['alpha'][idx]),
                                  bbox[idx][0], bbox[idx][1], bbox[idx][2], bbox[idx][3],
-                                 dims[idx][1], dims[idx][2], dims[idx][0], loc[idx][0],
-                                 loc[idx][1], loc[idx][2], single_pred_dict['rotation_y'][idx],
+                                 dims[idx][1], dims[idx][2], dims[idx][0],
+                                 loc[idx][0], loc[idx][1], loc[idx][2],
+                                 common_utils.normalize_angle(single_pred_dict['rotation_y'][idx]),
                                  single_pred_dict['score'][idx]), file=f)
 
         return annos

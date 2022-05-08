@@ -12,6 +12,15 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 
 
+def normalize_angle(x):
+    if x > np.pi:
+        return normalize_angle(x - 2 * np.pi)
+    elif x < -np.pi:
+        return normalize_angle(x + 2 * np.pi)
+    else:
+        return x
+
+
 def check_numpy_to_torch(x):
     if isinstance(x, np.ndarray):
         return torch.from_numpy(x).float(), True
