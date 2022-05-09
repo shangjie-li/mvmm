@@ -21,6 +21,7 @@ def parse_config():
     parser = argparse.ArgumentParser(description='arg parser')
     parser.add_argument('--cfg_file', type=str, default='data/config/ResNet_VFE.yaml', help='specify the config for training')
 
+    parser.add_argument('--batch_size', type=int, default=None, required=False, help='batch size for testing')
     parser.add_argument('--workers', type=int, default=4, help='number of workers for dataloader')
     parser.add_argument('--extra_tag', type=str, default='', help='extra tag for this experiment')
     parser.add_argument('--ckpt', type=str, default=None, help='checkpoint to start from')
@@ -49,6 +50,9 @@ def parse_config():
 
     if args.set_cfgs is not None:
         cfg_from_list(args.set_cfgs, cfg)
+    
+    if args.display:
+        args.batch_size = 1
 
     return args, cfg
     
@@ -137,6 +141,12 @@ def main():
     args, cfg = parse_config()
     dist_test = False
     total_gpus = 1
+    
+    if args.batch_size is None:
+        args.batch_size = cfg.OPTIMIZATION.BATCH_SIZE_PER_GPU
+    else:
+        assert args.batch_size % total_gpus == 0, 'Batch size should match the number of gpus'
+        args.batch_size = args.batch_size // total_gpus
 
     output_dir = cfg.ROOT_DIR / 'output' / cfg.EXP_GROUP_PATH / cfg.TAG / args.extra_tag
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -171,7 +181,7 @@ def main():
     test_set, test_loader, sampler = build_dataloader(
         dataset_cfg=cfg.DATA_CONFIG,
         class_names=cfg.CLASS_NAMES,
-        batch_size=1,
+        batch_size=args.batch_size,
         dist=dist_test, workers=args.workers, logger=logger, training=False
     )
 
