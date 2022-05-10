@@ -2,27 +2,19 @@ CLASS_NAMES: ['Car', 'Pedestrian', 'Cyclist']
 
 
 DATA_CONFIG: 
-    DATASET: 'KittiDataset'
-    DATA_PATH: 'data/kitti'
+    SPLIT: {
+        'train': train.txt, # Use `trainval.txt` if you want to train with the entire 7481 training samples.
+        'test': val.txt, # Use `test.txt` if you want to run on the 7518 testing samples.
+    }
     
     POINT_CLOUD_RANGE: [0, -39.68, -3, 69.12, 39.68, 1]
-    
-    DATA_SPLIT: {
-        'train': train,
-        'test': val, # Use `test` if you want to evaluate the model with testing dataset.
-    }
-    INFO_PATH: {
-        'train': kitti_infos_train.pkl,
-        'test': kitti_infos_val.pkl, # Use `kitti_infos_test.pkl` if you want to evaluate the model with testing dataset.
-    }
-    
     GET_ITEM_LIST: ['colored_points']
     SRC_FEATURE_LIST: ['x', 'y', 'z', 'intensity', 'r', 'g', 'b']
     USED_FEATURE_LIST: ['x', 'y', 'z', 'range', 'intensity', 'r', 'g', 'b']
     
     DATA_AUGMENTOR:
         - NAME: gt_sampling
-          DB_INFO_PATH: kitti_dbinfos_train.pkl
+          DB_INFO_PATH: kitti_dbinfos_train.pkl # Use `kitti_dbinfos_trainval.pkl` if you want to train with the entire 7481 training samples.
           PREPARE: {
              filter_by_min_points: ['Car:5', 'Pedestrian:5', 'Cyclist:5'],
              filter_by_difficulty: [-1],

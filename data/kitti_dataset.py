@@ -1,3 +1,4 @@
+import sys
 import copy
 import pickle
 from skimage import io
@@ -14,29 +15,41 @@ from utils import box_utils, calibration_kitti, common_utils, object3d_kitti
 
 
 class KittiDataset(torch_data.Dataset):
-    def __init__(self, dataset_cfg, class_names, training=True, logger=None, include_kitti_infos=True, data_augmentation=True):
-        self.dataset_cfg = dataset_cfg
+    def __init__(self, dataset_cfg, class_names, training=True, logger=None, data_augmentation=True):
         self.class_names = class_names
-        self.logger = logger
-        self.training = training
+        self.root_path = Path('data/kitti')
+        if dataset_cfg:
+            self.dataset_cfg = dataset_cfg
+            self.training = training
+            self.logger = logger
+            if self.training:
+                self.set_split(dataset_cfg.SPLIT['train'])
+                self.data_augmentation = data_augmentation
+            else:
+                self.set_split(dataset_cfg.SPLIT['test'])
+                self.data_augmentation = False
+            self.prepare_data()
+
+    def set_split(self, s):
+        assert s in ['test.txt', 'train.txt', 'trainval.txt', 'val.txt']
+        self.split = s
+        self.sample_id_list = [
+            x.strip() for x in open(self.root_path / 'ImageSets' / self.split).readlines()]
+        self.data_path = self.root_path / ('testing' if self.split == 'test.txt' else 'training')
+        self.info_file = self.root_path / ('kitti_infos_%s.pkl' % str(Path(self.split).stem))
+
+    def prepare_data(self):
+        self.kitti_infos = []
         
-        if self.training:
-            self.split = dataset_cfg.DATA_SPLIT['train']
-            self.info_path = dataset_cfg.INFO_PATH['train']
-            self.data_augmentation = data_augmentation
-        else:
-            self.split = dataset_cfg.DATA_SPLIT['test']
-            self.info_path = dataset_cfg.INFO_PATH['test']
-            self.data_augmentation = False
+        if self.logger is not None:
+            self.logger.info('Loading KITTI dataset')
         
-        self.root_path = Path(self.dataset_cfg.DATA_PATH) # e.g. Path('data/kitti')
-        self.root_split_path = self.root_path / 'training' if self.split in ['train', 'val'] else 'testing'
+        with open(self.info_file, 'rb') as f:
+            infos = pickle.load(f)
+        self.kitti_infos.extend(infos)
         
-        split_file = self.root_path / 'ImageSets' / (self.split + '.txt')
-        self.sample_id_list = [x.strip() for x in open(split_file).readlines()] if split_file.exists() else None
-        
-        if include_kitti_infos:
-            self.include_kitti_infos()
+        if self.logger is not None:
+            self.logger.info('Total samples for KITTI dataset: %d' % (len(self.kitti_infos)))
         
         self.point_cloud_range = np.array(self.dataset_cfg.POINT_CLOUD_RANGE, dtype=np.float32)
         self.src_feature_list = self.dataset_cfg.SRC_FEATURE_LIST
@@ -45,8 +58,10 @@ class KittiDataset(torch_data.Dataset):
         self.used_point_features = len(self.used_feature_list)
         
         self.data_augmentor = DataAugmentor(
-            self.root_path, self.dataset_cfg.DATA_AUGMENTOR, self.class_names, self.src_point_features, logger=self.logger
+            self.root_path, self.dataset_cfg.DATA_AUGMENTOR, self.class_names,
+            self.src_point_features, logger=self.logger
         ) if self.data_augmentation else None
+        
         self.total_epochs = 0
         self._merge_all_iters_to_one_epoch = False
 
@@ -57,7 +72,7 @@ class KittiDataset(torch_data.Dataset):
         Returns:
             points: (N, 4), Points of (x, y, z, intensity)
         """
-        pts_file = self.root_split_path / 'velodyne' / ('%s.bin' % idx)
+        pts_file = self.data_path / 'velodyne' / ('%s.bin' % idx)
         assert pts_file.exists(), 'File not found: %s' % pts_file
         return np.fromfile(str(pts_file), dtype=np.float32).reshape(-1, 4)
 
@@ -68,7 +83,7 @@ class KittiDataset(torch_data.Dataset):
         Returns:
             img: (H, W, 3), RGB Image
         """
-        img_file = self.root_split_path / 'image_2' / ('%s.png' % idx)
+        img_file = self.data_path / 'image_2' / ('%s.png' % idx)
         assert img_file.exists(), 'File not found: %s' % img_file
         img = io.imread(img_file)
         img = img.astype(np.float32)
@@ -82,7 +97,7 @@ class KittiDataset(torch_data.Dataset):
         Returns:
             image_shape: (2), H * W
         """
-        img_file = self.root_split_path / 'image_2' / ('%s.png' % idx)
+        img_file = self.data_path / 'image_2' / ('%s.png' % idx)
         assert img_file.exists(), 'File not found: %s' % img_file
         return np.array(io.imread(img_file).shape[:2], dtype=np.int32)
 
@@ -93,7 +108,7 @@ class KittiDataset(torch_data.Dataset):
         Returns:
             objects: list, [Object3d, Object3d, ...]
         """
-        label_file = self.root_split_path / 'label_2' / ('%s.txt' % idx)
+        label_file = self.data_path / 'label_2' / ('%s.txt' % idx)
         assert label_file.exists(), 'File not found: %s' % label_file
         return object3d_kitti.get_objects_from_label(label_file)
 
@@ -104,7 +119,7 @@ class KittiDataset(torch_data.Dataset):
         Returns:
             calib: calibration_kitti.Calibration
         """
-        calib_file = self.root_split_path / 'calib' / ('%s.txt' % idx)
+        calib_file = self.data_path / 'calib' / ('%s.txt' % idx)
         assert calib_file.exists(), 'File not found: %s' % calib_file
         return calibration_kitti.Calibration(calib_file)
 
@@ -115,7 +130,7 @@ class KittiDataset(torch_data.Dataset):
         Returns:
             plane: (4), [a, b, c, d]
         """
-        plane_file = self.root_split_path / 'planes' / ('%s.txt' % idx)
+        plane_file = self.data_path / 'planes' / ('%s.txt' % idx)
         assert plane_file.exists(), 'File not found: %s' % plane_file
 
         with open(plane_file, 'r') as f:
@@ -149,31 +164,23 @@ class KittiDataset(torch_data.Dataset):
             colored_points: (N, 7), Points of (x, y, z, intensity, r, g, b)
         """
         points = self.get_points(idx)
-        img = self.get_image(idx)
-        img_shape = self.get_image_shape(idx)
         calib = self.get_calib(idx)
-        
-        fov_flag = self.get_fov_flag(points, img_shape, calib)
+        fov_flag = self.get_fov_flag(points, self.get_image_shape(idx), calib)
         points = points[fov_flag]
-        
         pts_rect = calib.lidar_to_rect(points[:, 0:3])
         pts_img, pts_rect_depth = calib.rect_to_img(pts_rect) # [N', 2], [N']
         pts_img = pts_img.astype(np.int)
-        rgb = img[pts_img[:, 1], pts_img[:, 0], :] # [N', 3]
+        rgb = self.get_image(idx)[pts_img[:, 1], pts_img[:, 0], :] # [N', 3]
         return np.concatenate([points, rgb], axis=1)
 
-    def get_infos(self, num_workers=4, has_label=True, count_inside_pts=True, sample_id_list=None):
+    def get_infos(self, has_label=True, count_inside_pts=True, num_workers=4):
         import concurrent.futures as futures
 
         def process_single_scene(sample_idx):
-            print('%s sample_idx: %s' % (self.split, sample_idx))
+            print('sample_idx: %s in %s' % (sample_idx, self.split))
             info = {}
-            
-            pc_info = {'num_features': 4, 'lidar_idx': sample_idx}
-            info['point_cloud'] = pc_info
-
-            image_info = {'image_idx': sample_idx, 'image_shape': self.get_image_shape(sample_idx)}
-            info['image'] = image_info
+            info['point_cloud'] = {'num_features': 4, 'lidar_idx': sample_idx}
+            info['image'] = {'image_idx': sample_idx, 'image_shape': self.get_image_shape(sample_idx)}
             
             calib = self.get_calib(sample_idx)
             P2_4x4 = np.concatenate([calib.P2, np.array([[0., 0., 0., 1.]])], axis=0)
@@ -181,10 +188,8 @@ class KittiDataset(torch_data.Dataset):
             R0_4x4[3, 3] = 1.
             R0_4x4[:3, :3] = calib.R0
             V2C_4x4 = np.concatenate([calib.V2C, np.array([[0., 0., 0., 1.]])], axis=0)
+            info['calib'] = {'P2': P2_4x4, 'R0_rect': R0_4x4, 'Tr_velo_to_cam': V2C_4x4}
             
-            calib_info = {'P2': P2_4x4, 'R0_rect': R0_4x4, 'Tr_velo_to_cam': V2C_4x4}
-            info['calib'] = calib_info
-
             if has_label:
                 obj_list = self.get_label(sample_idx)
                 annotations = {}
@@ -218,40 +223,36 @@ class KittiDataset(torch_data.Dataset):
                 if count_inside_pts:
                     points = self.get_points(sample_idx)
                     calib = self.get_calib(sample_idx)
-                    
                     fov_flag = self.get_fov_flag(points, info['image']['image_shape'], calib)
                     pts_fov = points[fov_flag]
-                    
                     corners_lidar = box_utils.boxes_to_corners_3d(gt_boxes_lidar)
                     num_points_in_gt = -np.ones(num_gt, dtype=np.int32)
-
                     for k in range(num_objects):
                         flag = box_utils.in_hull(pts_fov[:, 0:3], corners_lidar[k])
                         num_points_in_gt[k] = flag.sum()
                     annotations['num_points_in_gt'] = num_points_in_gt
-
+            
             return info
-
-        sample_id_list = sample_id_list if sample_id_list is not None else self.sample_id_list
+        
         with futures.ThreadPoolExecutor(num_workers) as executor:
-            infos = executor.map(process_single_scene, sample_id_list)
+            infos = executor.map(process_single_scene, self.sample_id_list)
+            
         return list(infos)
 
-    def create_groundtruth_database(self):
+    def create_gt_database(self):
         import torch
 
-        database_save_path = Path(self.root_path) / 'gt_database'
-        db_info_save_path = Path(self.root_path) / 'kitti_dbinfos_train.pkl'
+        database_save_path = Path(self.root_path) / ('gt_database_%s' % str(Path(self.split).stem))
+        db_info_save_path = Path(self.root_path) / ('kitti_dbinfos_%s.pkl' % str(Path(self.split).stem))
 
         database_save_path.mkdir(parents=True, exist_ok=True)
         all_db_infos = {}
 
-        info_path = self.root_path / self.info_path
-        with open(info_path, 'rb') as f:
+        with open(self.info_file, 'rb') as f:
             infos = pickle.load(f)
 
         for k in range(len(infos)):
-            print('gt_database sample: %d/%d' % (k + 1, len(infos)))
+            print('gt_database sample in %s: %d/%d' % (self.split, k + 1, len(infos)))
             info = infos[k]
             sample_idx = info['point_cloud']['lidar_idx']
             colored_points = self.get_colored_points_in_fov(sample_idx)
@@ -385,21 +386,6 @@ class KittiDataset(torch_data.Dataset):
         del d['logger']
         return d
 
-    def include_kitti_infos(self):
-        self.kitti_infos = []
-        
-        if self.logger is not None:
-            self.logger.info('Loading KITTI dataset')
-
-        info_path = self.root_path / self.info_path
-        with open(info_path, 'rb') as f:
-            infos = pickle.load(f)
-
-        self.kitti_infos.extend(infos)
-
-        if self.logger is not None:
-            self.logger.info('Total samples for KITTI dataset: %d' % (len(self.kitti_infos)))
-
     def merge_all_iters_to_one_epoch(self, merge=True, epochs=None):
         if merge:
             self._merge_all_iters_to_one_epoch = True
@@ -425,78 +411,36 @@ class KittiDataset(torch_data.Dataset):
                 random_world_rotation: float
                 random_world_scaling: float
                 point_features: (N', used_point_features)
-                point_labels: (N'), int
-                point_frequencies: (N'), float
                 image: optional, (H, W, 3), RGB Image
         """
         if self._merge_all_iters_to_one_epoch:
             index = index % len(self.kitti_infos)
         
         info = copy.deepcopy(self.kitti_infos[index])
-
         sample_idx = info['point_cloud']['lidar_idx']
         calib = self.get_calib(sample_idx)
         image_shape = info['image']['image_shape']
-
-        input_dict = {
+        data_dict = {
             'frame_id': sample_idx,
             'calib': calib,
             'image_shape': image_shape,
         }
-
+        
         get_item_list = self.dataset_cfg.get('GET_ITEM_LIST')
         if 'annos' in info:
             annos = info['annos']
             annos = common_utils.drop_info_with_name(annos, name='DontCare') # exclude class: DontCare
-            input_dict.update({
+            data_dict.update({
                 'gt_boxes': annos['gt_boxes_lidar'],
                 'gt_names': annos['name'],
                 'road_plane': self.get_road_plane(sample_idx)
             })
-        
         if 'colored_points' in get_item_list:
-            input_dict['colored_points'] = self.get_colored_points_in_fov(sample_idx)
-
+            data_dict['colored_points'] = self.get_colored_points_in_fov(sample_idx)
         if 'image' in get_item_list:
-            input_dict['image'] = self.get_image(sample_idx)
-
-        data_dict = self.prepare_data(data_dict=input_dict)
-        data_dict.pop('gt_names', None)
-        data_dict.pop('road_plane', None)
+            data_dict['image'] = self.get_image(sample_idx)
         
-        return data_dict
-
-    def prepare_data(self, data_dict):
-        """
-        Args:
-            data_dict:
-                frame_id: str, Sample index
-                calib: calibration_kitti.Calibration
-                image_shape: (2), H * W
-                gt_boxes: (M, 7), [x, y, z, l, w, h, heading] in lidar coordinate system
-                gt_names: (M), str
-                road_plane: (4), [a, b, c, d]
-                colored_points: (N, 7), Points of (x, y, z, intensity, r, g, b)
-                image: optional, (H, W, 3), RGB Image
-
-        Returns:
-            data_dict:
-                frame_id: str, Sample index
-                calib: calibration_kitti.Calibration
-                image_shape: (2), H * W
-                gt_boxes: (M', 8), [x, y, z, l, w, h, heading, class_id] in lidar coordinate system
-                gt_names: (M'), str
-                road_plane: (4), [a, b, c, d]
-                colored_points: (N', 7), Points of (x, y, z, intensity, r, g, b)
-                random_world_flip_along_x: bool
-                random_world_rotation: float
-                random_world_scaling: float
-                point_features: (N', used_point_features)
-                point_labels: (N'), int
-                point_frequencies: (N'), float
-                image: optional, (H, W, 3), RGB Image
-        """
-        data_dict = self.data_augmentor.forward(data_dict=data_dict) if self.data_augmentor is not None else data_dict
+        data_dict = self.data_augmentor.forward(data_dict=data_dict) if self.data_augmentor else data_dict
         mask = common_utils.mask_points_by_range(data_dict['colored_points'], self.point_cloud_range)
         data_dict['colored_points'] = data_dict['colored_points'][mask]
         
@@ -504,7 +448,7 @@ class KittiDataset(torch_data.Dataset):
             # Limit heading to [-pi, pi)
             data_dict['gt_boxes'][:, 6] = common_utils.limit_period(data_dict['gt_boxes'][:, 6], offset=0.5, period=2 * np.pi) 
             
-            # Include class: Car, Pedestrian, Cyclist
+            # Filter by the class: Car, Pedestrian, Cyclist
             gt_boxes_mask = np.array([n in self.class_names for n in data_dict['gt_names']], dtype=np.bool)
             data_dict['gt_boxes'] = data_dict['gt_boxes'][gt_boxes_mask]
             data_dict['gt_names'] = data_dict['gt_names'][gt_boxes_mask]
@@ -517,46 +461,14 @@ class KittiDataset(torch_data.Dataset):
             # Mask boxes outside range
             mask = box_utils.mask_boxes_outside_range_numpy(data_dict['gt_boxes'], self.point_cloud_range)
             data_dict['gt_boxes'] = data_dict['gt_boxes'][mask]
-            
-            colored_points = data_dict['colored_points']
-            gt_boxes = data_dict['gt_boxes']
-            
-            if gt_boxes.shape[0] > 0:
-                obj_points_list = []
-                obj_labels_list = []
-                obj_frequencies_list = []
-                point_indices = roiaware_pool3d_utils.points_in_boxes_cpu(
-                    torch.from_numpy(colored_points[:, 0:3]), torch.from_numpy(gt_boxes[:, :7])
-                ).numpy()  # (nboxes, npoints)
-                for i in range(gt_boxes.shape[0]):
-                    obj_points = colored_points[point_indices[i] > 0]
-                    obj_labels = np.ones((obj_points.shape[0])).astype(np.int32) * int(gt_boxes[i, 7])
-                    obj_frequencies = np.ones((obj_points.shape[0])) * obj_points.shape[0]
-                    obj_points_list.append(obj_points)
-                    obj_labels_list.append(obj_labels)
-                    obj_frequencies_list.append(obj_frequencies)
-                
-                background_points = box_utils.remove_points_in_boxes3d(colored_points, gt_boxes[:, :7])
-                bkg_labels = np.zeros((background_points.shape[0])).astype(np.int32)
-                bkg_frequencies = np.ones((background_points.shape[0])) * background_points.shape[0]
-                data_dict['colored_points'] = np.concatenate([background_points, np.concatenate(obj_points_list, axis=0)], axis=0)
-                data_dict['point_labels'] = np.concatenate([bkg_labels, np.concatenate(obj_labels_list, axis=0)], axis=0)
-                data_dict['point_frequencies'] = np.concatenate([bkg_frequencies, np.concatenate(obj_frequencies_list, axis=0)], axis=0)
-            
-            else:
-                data_dict['colored_points'] = colored_points
-                data_dict['point_labels'] = np.zeros((colored_points.shape[0])).astype(np.int32)
-                data_dict['point_frequencies'] = np.ones((colored_points.shape[0])) * colored_points.shape[0]
         
         if self.training:
             if len(data_dict['gt_boxes']) == 0:
                 new_index = np.random.randint(self.__len__())
                 return self.__getitem__(new_index)
-            
+                
             shuffle_idx = np.random.permutation(data_dict['colored_points'].shape[0])
             data_dict['colored_points'] = data_dict['colored_points'][shuffle_idx] # (N, 7)
-            data_dict['point_labels'] = data_dict['point_labels'][shuffle_idx] # (N)
-            data_dict['point_frequencies'] = data_dict['point_frequencies'][shuffle_idx] # (N)
         
         # For ablation study
         xs = data_dict['colored_points'][:, 0:1]
@@ -587,6 +499,8 @@ class KittiDataset(torch_data.Dataset):
         else:
             raise NotImplementedError
         
+        data_dict.pop('gt_names', None)
+        data_dict.pop('road_plane', None)
         return data_dict
 
     @staticmethod
@@ -607,8 +521,6 @@ class KittiDataset(torch_data.Dataset):
                 random_world_rotation: (batch_size), float
                 random_world_scaling: (batch_size), float
                 point_features: (N1 + N2 + ..., used_point_features)
-                point_labels: (N1 + N2 + ...), int
-                point_frequencies: (N1 + N2 + ...), float
                 image: optional, (batch_size, H_max, W_max, 3), RGB Image
         """
         data_dict = defaultdict(list)
@@ -621,7 +533,7 @@ class KittiDataset(torch_data.Dataset):
 
         for key, val in data_dict.items():
             try:
-                if key in ['point_features', 'point_labels', 'point_frequencies']:
+                if key in ['point_features']:
                     ret[key] = np.concatenate(val, axis=0)
                 elif key in ['colored_points']:
                     coors = []
@@ -660,47 +572,49 @@ class KittiDataset(torch_data.Dataset):
         return ret
 
 
-def create_kitti_infos(dataset_cfg, class_names, workers=4):
-    root_dir = (Path(__file__).resolve().parent / '../').resolve() # ~/mvmm
-    save_path = root_dir / dataset_cfg.DATA_PATH # ~/mvmm/data/kitti
-
-    print('---------------Start to generate data infos---------------')
-    
-    dataset = KittiDataset(dataset_cfg=dataset_cfg, class_names=class_names, training=True,
-        include_kitti_infos=False, data_augmentation=False)
-    kitti_infos_train = dataset.get_infos(num_workers=workers, has_label=True, count_inside_pts=True)
-    train_filename = save_path / dataset_cfg.INFO_PATH['train']
-    with open(train_filename, 'wb') as f:
-        pickle.dump(kitti_infos_train, f)
-    print('Kitti info train file is saved to %s' % train_filename)
-    
-    dataset = KittiDataset(dataset_cfg=dataset_cfg, class_names=class_names, training=False,
-        include_kitti_infos=False, data_augmentation=False)
-    kitti_infos_test = dataset.get_infos(num_workers=workers, has_label=True, count_inside_pts=True)
-    test_filename = save_path / dataset_cfg.INFO_PATH['test']
-    with open(test_filename, 'wb') as f:
-        pickle.dump(kitti_infos_test, f)
-    print('Kitti info test file is saved to %s' % test_filename)
-    
-    print('---------------Start create groundtruth database for data augmentation---------------')
-    dataset = KittiDataset(dataset_cfg=dataset_cfg, class_names=class_names, training=True,
-        include_kitti_infos=False, data_augmentation=False)
-    dataset.create_groundtruth_database()
-    
-    print('---------------Data preparation Done---------------')
-
-
 if __name__ == '__main__':
-    import sys
     if sys.argv.__len__() > 1 and sys.argv[1] == 'create_kitti_infos':
-        import yaml
-        from pathlib import Path
-        from easydict import EasyDict
-        try:
-            cfg = EasyDict(yaml.load(open(sys.argv[2]), Loader=yaml.FullLoader)) # YAML 5.1 use this for safety
-        except:
-            cfg = EasyDict(yaml.load(open(sys.argv[2])))
-        create_kitti_infos(
-            dataset_cfg=cfg.DATA_CONFIG,
-            class_names=cfg.CLASS_NAMES,
-        )
+        root_dir = (Path(__file__).resolve().parent / '../').resolve() # ~/mvmm
+        save_path = root_dir / 'data/kitti'
+        class_names = ['Car', 'Pedestrian', 'Cyclist']
+        dataset = KittiDataset(dataset_cfg=None, class_names=class_names)
+        
+        test_file_name = 'kitti_infos_test.pkl'
+        train_file_name = 'kitti_infos_train.pkl'
+        trainval_file_name = 'kitti_infos_trainval.pkl'
+        val_file_name = 'kitti_infos_val.pkl'
+        
+        print('---------------Generating data infos---------------')
+        
+        dataset.set_split('train.txt')
+        kitti_infos_train = dataset.get_infos(has_label=True, count_inside_pts=True)
+        with open(save_path / train_file_name, 'wb') as f:
+            pickle.dump(kitti_infos_train, f)
+        print('Kitti info for train.txt is saved to %s' % train_file_name)
+        
+        dataset.set_split('val.txt')
+        kitti_infos_val = dataset.get_infos(has_label=True, count_inside_pts=True)
+        with open(save_path / val_file_name, 'wb') as f:
+            pickle.dump(kitti_infos_val, f)
+        print('Kitti info for val.txt is saved to %s' % val_file_name)
+        
+        dataset.set_split('test.txt')
+        kitti_infos_test = dataset.get_infos(has_label=False, count_inside_pts=False)
+        with open(save_path / test_file_name, 'wb') as f:
+            pickle.dump(kitti_infos_test, f)
+        print('Kitti info for test.txt is saved to %s' % test_file_name)
+        
+        with open(save_path / trainval_file_name, 'wb') as f:
+            pickle.dump(kitti_infos_train + kitti_infos_val, f)
+        print('Kitti info for trainval.txt is saved to %s' % trainval_file_name)
+        
+        print('---------------Generating ground truth databases---------------')
+        
+        dataset.set_split('train.txt')
+        dataset.create_gt_database()
+        
+        dataset.set_split('trainval.txt')
+        dataset.create_gt_database()
+        
+        print('---------------Data preparation Done---------------')
+

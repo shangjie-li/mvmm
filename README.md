@@ -43,6 +43,7 @@ Implementation of MVMM in PyTorch for KITTI 3D Object Detetcion
    ├── data
    │   ├── kitti
    │   │   │── ImageSets
+   │   │   │   ├──test.txt & train.txt & trainval.txt & val.txt
    │   │   │── training
    │   │   │   ├──calib & velodyne & label_2 & image_2 & planes
    │   │   │── testing
@@ -50,11 +51,11 @@ Implementation of MVMM in PyTorch for KITTI 3D Object Detetcion
    ├── layers
    ├── utils
    ```
- - Generate the ground truth database and data infos by running the following command
+ - Generate ground truth databases and data infos by running the following command
    ```
-   # This will create gt_database dir and info files in mvmm/data/kitti.
+   # This will create two database dirs and six info files in mvmm/data/kitti.
    cd mvmm
-   python -m data.kitti_dataset create_kitti_infos data/config/ResNet_VFE.yaml
+   python -m data.kitti_dataset create_kitti_infos
    ```
  - Display the dataset
    ```

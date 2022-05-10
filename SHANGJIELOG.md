@@ -302,4 +302,16 @@
 | 216 | ResNet_PFE(xyzrirgb) | sampling, flip, rotation, scaling | 87.8, 77.3, 76.3 | -                | -                | -    |
 
 
+## Ablation Experiments for MVMM (10)
+
+ * The 3D AP with 11 Recall Positions (R11) is used to evaluate the models. The latency is tested on a single 1080Ti GPU.
+
+| ID  | Model                | Description                       | Car              | Pedestrian       | Cyclist          | Lat. |
+| 217 | Baseline_VFE         | trainval -> val                   |                  |                  |                  |      |
+| 218 | Baseline_VFE         | trainval -> val                   |                  |                  |                  |      |
+| 219 | Baseline_VFE         | trainval -> val                   |                  |                  |                  |      |
+| 220 | ResNet_PFE(xyzrirgb) | trainval -> val & test            |                  |                  |                  |      |
+| 221 | ResNet_PFE(xyzrirgb) | trainval -> val & test            |                  |                  |                  |      |
+| 222 | ResNet_PFE(xyzrirgb) | trainval -> val & test            |                  |                  |                  |      |
+
 

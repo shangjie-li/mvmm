@@ -2,7 +2,8 @@
 **build**
 **egg-info**
 **dist**
-data/kitti/gt_database
+data/kitti/gt_database_train
+data/kitti/gt_database_trainval
 data/kitti/training
 data/kitti/testing
 data/kitti/*.pkl
@@ -10,3 +11,4 @@ data/kitti/*.pkl
 *.so
 output*
 weights
+SHANGJIELOG.md

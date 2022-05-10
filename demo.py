@@ -27,10 +27,15 @@ def parse_config():
                         help='specify the index of sample')
     parser.add_argument('--onto_image', action='store_true', default=False,
                         help='whether to project results onto the RGB image')
+    parser.add_argument('--score_thresh', type=float, default=0.3,
+                        help='specify the score threshold')
 
     args = parser.parse_args()
 
     cfg_from_yaml_file(args.cfg_file, cfg)
+
+    if args.score_thresh:
+        cfg.MODEL.POST_PROCESSING.SCORE_THRESH = args.score_thresh
 
     return args, cfg
 
@@ -66,7 +71,7 @@ def run(model, demo_dataset, data_dict, frame_id, args):
         point_colors = data_dict['colored_points'][:, -3:]
     else:
         point_colors = None
-    if args.show_gt_boxes:
+    if args.show_gt_boxes and data_dict.get('gt_boxes', None) is not None:
         gt_boxes, ref_labels = data_dict['gt_boxes'][0, :, :7], None
     else:
         gt_boxes, ref_labels = None, [cfg.CLASS_NAMES[j - 1] for j in pred_dicts[0]['pred_labels']]
