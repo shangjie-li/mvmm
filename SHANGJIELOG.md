@@ -307,11 +307,13 @@
  * The 3D AP with 11 Recall Positions (R11) is used to evaluate the models. The latency is tested on a single 1080Ti GPU.
 
 | ID  | Model                | Description                       | Car              | Pedestrian       | Cyclist          | Lat. |
-| 217 | Baseline_VFE         | trainval -> val                   |                  |                  |                  |      |
-| 218 | Baseline_VFE         | trainval -> val                   |                  |                  |                  |      |
-| 219 | Baseline_VFE         | trainval -> val                   |                  |                  |                  |      |
-| 220 | ResNet_PFE(xyzrirgb) | trainval -> val & test            |                  |                  |                  |      |
-| 221 | ResNet_PFE(xyzrirgb) | trainval -> val & test            |                  |                  |                  |      |
-| 222 | ResNet_PFE(xyzrirgb) | trainval -> val & test            |                  |                  |                  |      |
+|:---:|:--------------------:|:---------------------------------:|:----------------:|:----------------:|:----------------:|:----:|
+| 217 | ResNet_VFE(xyzrirgb) | trainval -> val                   | 97.2, 88.4, 87.5 | 72.5, 71.2, 69.2 | 91.5, 88.9, 83.7 | -    |
+| 218 | ResNet_VFE(xyzrirgb) | trainval -> val, test             | 96.8, 88.5, 87.4 | 75.3, 71.7, 70.5 | 90.9, 88.1, 84.9 | -    |
+| 219 | ResNet_VFE(xyzrirgb) | trainval -> val                   | 98.3, 89.6, 88.9 | -                | -                | -    |
+| 220 | ResNet_VFE(xyzrirgb) | trainval -> val, test             | 98.1, 89.5, 88.9 | -                | -                | -    |
+| 221 | ResNet_VFE(xyzrirgb) | trainval -> val                   | -                | 73.1, 71.4, 68.9 | 92.1, 86.4, 83.8 | -    |
+| 222 | ResNet_VFE(xyzrirgb) | trainval -> val, test             | -                | 71.2, 69.1, 66.3 | 93.7, 87.5, 84.2 | -    |
+| 223 | Baseline_VFE         | trainval -> val                   | 97.5, 88.0, 85.4 | 68.6, 65.1, 62.0 | 88.1, 85.2, 81.5 | -    |
 
 
