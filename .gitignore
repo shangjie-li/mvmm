@@ -11,5 +11,5 @@ data/kitti/*.pkl
 *.so
 output*
 weights
-final_results
+final_results*
 SHANGJIELOG.md

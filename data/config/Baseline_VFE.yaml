@@ -104,7 +104,7 @@ MODEL:
         EVAL_METRIC: kitti
         NMS_CONFIG:
             NMS_TYPE: nms_gpu
-            NMS_THRESH: 0.01
+            NMS_THRESH: 0.1
             NMS_PRE_MAXSIZE: 4096
             NMS_POST_MAXSIZE: 500
 

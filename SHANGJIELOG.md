@@ -317,3 +317,13 @@
 | 223 | Baseline_VFE         | trainval -> val                   | 97.5, 88.0, 85.4 | 68.6, 65.1, 62.0 | 88.1, 85.2, 81.5 | -    |
 
 
+## Ablation Experiments for MVMM (11)
+
+ * The 3D AP with 11 Recall Positions (R11) is used to evaluate the models. The latency is tested on a single 1080Ti GPU.
+
+| ID  | Model                | Description                       | Car              | Pedestrian       | Cyclist          | Lat. |
+|:---:|:--------------------:|:---------------------------------:|:----------------:|:----------------:|:----------------:|:----:|
+| 218 | ResNet_VFE(xyzrirgb) | trainval -> val, THRESH(NMS)=0.01 | 96.8, 88.5, 87.4 | 75.3, 71.7, 70.5 | 90.9, 88.1, 84.9 | -    |
+| 218 | ResNet_VFE(xyzrirgb) | trainval -> val, THRESH(NMS)=0.1  | 96.8, 88.5, 87.5 | 78.3, 75.4, 72.0 | 93.4, 89.9, 85.0 | -    |
+
+
