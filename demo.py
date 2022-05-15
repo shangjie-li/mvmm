@@ -27,7 +27,7 @@ def parse_config():
                         help='specify the index of sample')
     parser.add_argument('--onto_image', action='store_true', default=False,
                         help='whether to project results onto the RGB image')
-    parser.add_argument('--score_thresh', type=float, default=0.3,
+    parser.add_argument('--score_thresh', type=float, default=0.1,
                         help='specify the score threshold')
 
     args = parser.parse_args()
