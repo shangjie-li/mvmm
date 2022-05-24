@@ -53,7 +53,7 @@ Implementation of MVMM in PyTorch for KITTI 3D Object Detetcion
    ```
  - Generate ground truth databases and data infos by running the following command
    ```
-   # This will create two database dirs and six info files in mvmm/data/kitti.
+   # This will create two database dirs and six info files in mvmm/data/kitti (Take 20 mins).
    cd mvmm
    python -m data.kitti_dataset create_kitti_infos
    ```

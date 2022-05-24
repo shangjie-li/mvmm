@@ -10,7 +10,6 @@ import torch
 from data import cfg, cfg_from_yaml_file
 from data import KittiDataset
 from utils import common_utils
-from utils import open3d_vis_utils as V
 
 
 def parse_config():
@@ -23,6 +22,8 @@ def parse_config():
         help='whether to use data augmentation')
     parser.add_argument('--show_boxes', action='store_true', default=False,
         help='whether to show boxes')
+    parser.add_argument('--onto_range_image', action='store_true', default=False,
+        help='whether to show the range image')
 
     args = parser.parse_args()
 
@@ -57,15 +58,37 @@ if __name__ == '__main__':
                 print(val)
         print()
         
-        if set(['r', 'g', 'b']).issubset(set(dataset.used_feature_list)):
-            point_colors = data_dict['colored_points'][:, -3:]
+        points = data_dict['colored_points'][:, 0:3]
+        f = dataset.used_feature_list
+        if args.onto_range_image:
+            from utils import opencv_vis_utils as V
+            features = dataset.get_point_features(data_dict['colored_points'], f)
+            img = dataset.range_convertor.get_range_image(points, features).transpose(1, 2, 0)
+            _, _, cu, cv = dataset.range_convertor.get_pixel_coords(points)
+            if set(['r', 'g', 'b']).issubset(set(f)):
+                img = img[:, :, [f.index('b'), f.index('g'), f.index('r')]]
+            elif 'intensity' in f:
+                img = img[:, :, [f.index('intensity')]]
+            else:
+                img = img[:, :, [0]]
+            V.draw_scenes(
+                img,
+                calib=None,
+                ref_boxes2d=dataset.range_convertor.get_range_boxes(data_dict['gt_boxes'][:, :7], cu, cv) if args.show_boxes else None,
+                ref_labels=[cfg.CLASS_NAMES[j - 1] for j in data_dict['gt_boxes'][:, 7].astype(np.int)],
+                window_name=data_dict['frame_id'],
+            )
         else:
-            point_colors = None
-        V.draw_scenes(
-            points=data_dict['colored_points'][:, 0:3],
-            ref_boxes=data_dict['gt_boxes'][:, :7] if args.show_boxes else None,
-            ref_labels=[cfg.CLASS_NAMES[j - 1] for j in data_dict['gt_boxes'][:, 7].astype(np.int)],
-            point_colors=point_colors,
-            window_name=data_dict['frame_id'],
-        )
+            from utils import open3d_vis_utils as V
+            if set(['r', 'g', 'b']).issubset(set(f)):
+                point_colors = data_dict['colored_points'][:, -3:]
+            else:
+                point_colors = None
+            V.draw_scenes(
+                points,
+                ref_boxes=data_dict['gt_boxes'][:, :7] if args.show_boxes else None,
+                ref_labels=[cfg.CLASS_NAMES[j - 1] for j in data_dict['gt_boxes'][:, 7].astype(np.int)],
+                point_colors=point_colors,
+                window_name=data_dict['frame_id'],
+            )
         

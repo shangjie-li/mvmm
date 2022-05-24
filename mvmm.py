@@ -37,6 +37,7 @@ class MVMM(nn.Module):
             'point_cloud_range': self.dataset.point_cloud_range,
             'training': self.dataset.training,
             'num_point_features': self.dataset.used_point_features,
+            'range_convertor': self.dataset.range_convertor,
         }
         for module_name in self.module_topology:
             module, model_info_dict = getattr(self, 'build_%s' % module_name)(
@@ -48,10 +49,10 @@ class MVMM(nn.Module):
     def build_rv_backbone(self, model_info_dict):
         if self.model_cfg.get('RV_BACKBONE', None) is None:
             return None, model_info_dict
-        
         rv_backbone_module = rv_backbones.__all__[self.model_cfg.RV_BACKBONE.NAME](
             model_cfg=self.model_cfg.RV_BACKBONE,
             input_channels=model_info_dict['num_point_features'],
+            range_convertor=model_info_dict['range_convertor'],
         )
         model_info_dict['module_list'].append(rv_backbone_module)
         model_info_dict['num_rv_features'] = rv_backbone_module.num_rv_features
@@ -60,7 +61,6 @@ class MVMM(nn.Module):
     def build_pv_bridge(self, model_info_dict):
         if self.model_cfg.get('PV_BRIDGE', None) is None:
             return None, model_info_dict
-
         pv_bridge_module = pv_bridges.__all__[self.model_cfg.PV_BRIDGE.NAME](
             model_cfg=self.model_cfg.PV_BRIDGE,
             input_channels=model_info_dict['num_rv_features'] if 'num_rv_features' in model_info_dict else 0,
@@ -75,7 +75,6 @@ class MVMM(nn.Module):
     def build_bev_backbone(self, model_info_dict):
         if self.model_cfg.get('BEV_BACKBONE', None) is None:
             return None, model_info_dict
-
         bev_backbone_module = bev_backbones.__all__[self.model_cfg.BEV_BACKBONE.NAME](
             model_cfg=self.model_cfg.BEV_BACKBONE,
             input_channels=model_info_dict['num_pv_features'],
@@ -276,12 +275,12 @@ def load_data_to_gpu(batch_dict):
     for key, val in batch_dict.items():
         if not isinstance(val, np.ndarray):
             continue
-        elif key in ['frame_id', 'metadata', 'calib']:
+        elif key in ['frame_id', 'calib']:
             continue
-        elif key in ['images']:
-            batch_dict[key] = torch.from_numpy(val).float().cuda().contiguous()
         elif key in ['image_shape']:
             batch_dict[key] = torch.from_numpy(val).int().cuda()
+        elif key in ['range_image']:
+            batch_dict[key] = torch.from_numpy(val).float().cuda().contiguous()
         else:
             batch_dict[key] = torch.from_numpy(val).float().cuda()
 

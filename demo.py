@@ -67,10 +67,8 @@ def run(model, demo_dataset, data_dict, frame_id, args):
             pred_dicts, _ = model.forward(data_dict)
         print('Time cost per batch: %s' % (round((time.time() - time0) / num_iter, 3)))
     
-    if set(['r', 'g', 'b']).issubset(set(demo_dataset.used_feature_list)):
-        point_colors = data_dict['colored_points'][:, -3:]
-    else:
-        point_colors = None
+    f = demo_dataset.used_feature_list
+    point_colors = data_dict['colored_points'][:, -3:] if set(['r', 'g', 'b']).issubset(set(f)) else None
     if args.show_gt_boxes and data_dict.get('gt_boxes', None) is not None:
         gt_boxes, ref_labels = data_dict['gt_boxes'][0, :, :7], None
     else:

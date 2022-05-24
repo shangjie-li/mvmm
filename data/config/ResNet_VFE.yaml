@@ -8,22 +8,23 @@ DATA_CONFIG:
     }
     
     POINT_CLOUD_RANGE: [0, -40, -3, 70.4, 40, 1]
-    GET_ITEM_LIST: ['colored_points']
     SRC_FEATURE_LIST: ['x', 'y', 'z', 'intensity', 'r', 'g', 'b']
     USED_FEATURE_LIST: ['x', 'y', 'z', 'range', 'intensity', 'r', 'g', 'b']
     
-    DATA_AUGMENTOR:
+    RANGE_IMAGE_CONFIG:
+        FULL_SIZE: [64, 2048]
+        FRONT_SIZE: [48, 512]
+        LIDAR_FOV_UP: 2
+        LIDAR_FOV_DOWN: 24.8
+    
+    AUGMENTOR_LIST:
         - NAME: gt_sampling
           DB_INFO_PATH: kitti_dbinfos_train.pkl # Use `kitti_dbinfos_trainval.pkl` if you want to train with the entire 7481 training samples.
-          PREPARE: {
-             filter_by_min_points: ['Car:5', 'Pedestrian:5', 'Cyclist:5'],
-             filter_by_difficulty: [-1],
-          }
+          FILTER_BY_MIN_POINTS: ['Car:15', 'Pedestrian:15', 'Cyclist:15']
+          FILTER_BY_DIFFICULTY: [-1]
           SAMPLE_GROUPS: ['Car:5', 'Pedestrian:5', 'Cyclist:5']
-          MIN_VISIBLE_POINTS: 5
-          REMOVE_OCCLUDED_POINTS: True
-          CHANGE_OBJECT_POSITION: True
-    
+          RANDOM_SAMPLING: True
+        
         - NAME: random_world_flip_along_x
         
         - NAME: random_world_rotation
@@ -38,10 +39,6 @@ MODEL:
 
     RV_BACKBONE:
         NAME: ResNet
-        FULL_SIZE_OF_RANGE_IMAGE: [64, 2048]
-        FRONT_SIZE_OF_RANGE_IMAGE: [48, 512]
-        LIDAR_FOV_UP: 2
-        LIDAR_FOV_DOWN: 24.8
         FILTERS: [4]
 
     PV_BRIDGE:

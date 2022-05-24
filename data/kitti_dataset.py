@@ -9,9 +9,9 @@ import torch
 import numpy as np
 import torch.utils.data as torch_data
 
-from .augmentor.data_augmentor import DataAugmentor
 from ops.roiaware_pool3d import roiaware_pool3d_utils
-from utils import box_utils, calibration_kitti, common_utils, object3d_kitti
+from utils import box_utils, common_utils, object3d_kitti, calibration_kitti
+from utils import range_image_utils, augmentor_utils
 
 
 class KittiDataset(torch_data.Dataset):
@@ -25,10 +25,11 @@ class KittiDataset(torch_data.Dataset):
             if self.training:
                 self.set_split(dataset_cfg.SPLIT['train'])
                 self.data_augmentation = data_augmentation
+                self.prepare_data()
             else:
                 self.set_split(dataset_cfg.SPLIT['test'])
                 self.data_augmentation = False
-            self.prepare_data()
+                self.prepare_data()
 
     def set_split(self, s):
         assert s in ['test.txt', 'train.txt', 'trainval.txt', 'val.txt']
@@ -39,11 +40,10 @@ class KittiDataset(torch_data.Dataset):
         self.info_file = self.root_path / ('kitti_infos_%s.pkl' % str(Path(self.split).stem))
 
     def prepare_data(self):
-        self.kitti_infos = []
-        
         if self.logger is not None:
             self.logger.info('Loading KITTI dataset')
         
+        self.kitti_infos = []
         with open(self.info_file, 'rb') as f:
             infos = pickle.load(f)
         self.kitti_infos.extend(infos)
@@ -57,10 +57,18 @@ class KittiDataset(torch_data.Dataset):
         self.used_feature_list = self.dataset_cfg.USED_FEATURE_LIST
         self.used_point_features = len(self.used_feature_list)
         
-        self.data_augmentor = DataAugmentor(
-            self.root_path, self.dataset_cfg.DATA_AUGMENTOR, self.class_names,
-            self.src_point_features, logger=self.logger
-        ) if self.data_augmentation else None
+        self.range_convertor = range_image_utils.RangeConvertor(
+            self.dataset_cfg.RANGE_IMAGE_CONFIG
+        )
+        
+        if self.data_augmentation and self.dataset_cfg.get('AUGMENTOR_LIST', None) is not None:
+            self.data_augmentor = augmentor_utils.DataAugmentor(
+                self.dataset_cfg.AUGMENTOR_LIST,
+                self.root_path, self.class_names, self.src_point_features, self.range_convertor,
+                logger=self.logger
+            )
+        else:
+            self.data_augmentor = None
         
         self.total_epochs = 0
         self._merge_all_iters_to_one_epoch = False
@@ -68,9 +76,9 @@ class KittiDataset(torch_data.Dataset):
     def get_points(self, idx):
         """
         Args:
-            idx: str, Sample index
+            idx: str, sample index
         Returns:
-            points: (N, 4), Points of (x, y, z, intensity)
+            points: (N, 4), points of (x, y, z, intensity)
         """
         pts_file = self.data_path / 'velodyne' / ('%s.bin' % idx)
         assert pts_file.exists(), 'File not found: %s' % pts_file
@@ -79,9 +87,9 @@ class KittiDataset(torch_data.Dataset):
     def get_image(self, idx):
         """
         Args:
-            idx: str, Sample index
+            idx: str, sample index
         Returns:
-            img: (H, W, 3), RGB Image
+            img: (H, W, 3), RGB image
         """
         img_file = self.data_path / 'image_2' / ('%s.png' % idx)
         assert img_file.exists(), 'File not found: %s' % img_file
@@ -93,7 +101,7 @@ class KittiDataset(torch_data.Dataset):
     def get_image_shape(self, idx):
         """
         Args:
-            idx: str, Sample index
+            idx: str, sample index
         Returns:
             image_shape: (2), H * W
         """
@@ -104,7 +112,7 @@ class KittiDataset(torch_data.Dataset):
     def get_label(self, idx):
         """
         Args:
-            idx: str, Sample index
+            idx: str, sample index
         Returns:
             objects: list, [Object3d, Object3d, ...]
         """
@@ -115,7 +123,7 @@ class KittiDataset(torch_data.Dataset):
     def get_calib(self, idx):
         """
         Args:
-            idx: str, Sample index
+            idx: str, sample index
         Returns:
             calib: calibration_kitti.Calibration
         """
@@ -126,7 +134,7 @@ class KittiDataset(torch_data.Dataset):
     def get_road_plane(self, idx):
         """
         Args:
-            idx: str, Sample index
+            idx: str, sample index
         Returns:
             plane: (4), [a, b, c, d]
         """
@@ -138,7 +146,7 @@ class KittiDataset(torch_data.Dataset):
         lines = [float(i) for i in lines[3].split()]
         plane = np.asarray(lines)
 
-        # Ensure normal is always facing up, this is in the rectified camera coordinate
+        # Ensure normal is always facing up, this is in the rectified camera coordinates
         if plane[1] > 0:
             plane = -plane
 
@@ -159,9 +167,9 @@ class KittiDataset(torch_data.Dataset):
     def get_colored_points_in_fov(self, idx):
         """
         Args:
-            idx: str, Sample index
+            idx: str, sample index
         Returns:
-            colored_points: (N, 7), Points of (x, y, z, intensity, r, g, b)
+            colored_points: (N, 7), points of (x, y, z, intensity, r, g, b)
         """
         points = self.get_points(idx)
         calib = self.get_calib(idx)
@@ -172,6 +180,41 @@ class KittiDataset(torch_data.Dataset):
         pts_img = pts_img.astype(np.int)
         rgb = self.get_image(idx)[pts_img[:, 1], pts_img[:, 0], :] # [N', 3]
         return np.concatenate([points, rgb], axis=1)
+
+    def get_point_features(self, points, used_feature_list, normalize=False):
+        xs = points[:, 0:1]
+        ys = points[:, 1:2]
+        zs = points[:, 2:3]
+        ranges = np.sqrt(xs ** 2 + ys ** 2 + zs ** 2)
+        intensities = points[:, 3:4]
+        colors = points[:, 4:7]
+        
+        if normalize:
+            xs = (xs - 15.96) / 10.85
+            ys = (ys - 0.11) / 7.19
+            zs = (zs - (-1.04)) / 0.82
+            ranges = (ranges - 17.29) / 11.35
+            intensities = (intensities - 0.24) / 0.15
+            colors = (colors - np.array((0.35, 0.36, 0.35))) / np.array((0.27, 0.26, 0.26))
+        
+        f = used_feature_list
+        if f == ['x', 'y', 'z', 'intensity', 'r', 'g', 'b']:
+            features = np.concatenate([xs, ys, zs, intensities, colors], axis=1)
+        elif f == ['x', 'y', 'z', 'intensity']:
+            features = np.concatenate([xs, ys, zs, intensities], axis=1)
+        elif f == ['r', 'g', 'b']:
+            features = colors
+        elif f == ['x', 'y', 'z', 'range', 'intensity']:
+            features = np.concatenate([xs, ys, zs, ranges, intensities], axis=1)
+        elif f == ['x', 'y', 'z', 'range', 'intensity', 'r', 'g', 'b']:
+            features = np.concatenate([xs, ys, zs, ranges, intensities, colors], axis=1)
+        elif f == ['x', 'y', 'z']:
+            features = np.concatenate([xs, ys, zs], axis=1)
+        elif f == ['range']:
+            features = ranges
+        else:
+            raise NotImplementedError
+        return features
 
     def get_infos(self, has_label=True, count_inside_pts=True, num_workers=4):
         import concurrent.futures as futures
@@ -216,7 +259,7 @@ class KittiDataset(torch_data.Dataset):
                 l, h, w = dims[:, 0:1], dims[:, 1:2], dims[:, 2:3]
                 loc_lidar[:, 2] += h[:, 0] / 2
                 gt_boxes_lidar = np.concatenate([loc_lidar, l, w, h, -(np.pi / 2 + rots[..., np.newaxis])], axis=1)
-                annotations['gt_boxes_lidar'] = gt_boxes_lidar # (M, 7), [x, y, z, l, w, h, heading] in lidar coordinate system
+                annotations['gt_boxes_lidar'] = gt_boxes_lidar # (M, 7), [x, y, z, l, w, h, heading] in lidar coordinates
 
                 info['annos'] = annotations
 
@@ -299,7 +342,6 @@ class KittiDataset(torch_data.Dataset):
             pred_dicts: list, [{pred_boxes: (M, 7), pred_scores: (M), pred_labels: (M)}, {...}, ...]
             class_names:
             output_path:
-
         Returns:
 
         """
@@ -402,31 +444,25 @@ class KittiDataset(torch_data.Dataset):
         """
         Returns:
             data_dict:
-                frame_id: str, Sample index
+                frame_id: str, sample index
+                colored_points: (N, 7), points of (x, y, z, intensity, r, g, b)
                 calib: calibration_kitti.Calibration
                 image_shape: (2), H * W
-                gt_boxes: (M', 8), [x, y, z, l, w, h, heading, class_id] in lidar coordinate system
-                colored_points: (N', 7), Points of (x, y, z, intensity, r, g, b)
-                random_world_flip_along_x: bool
-                random_world_rotation: float
-                random_world_scaling: float
-                point_features: (N', used_point_features)
-                image: optional, (H, W, 3), RGB Image
+                gt_boxes: (M, 8), [x, y, z, l, w, h, heading, class_id] in lidar coordinates
+                range_image: (used_point_features, 48, 512), front range image
         """
         if self._merge_all_iters_to_one_epoch:
             index = index % len(self.kitti_infos)
         
         info = copy.deepcopy(self.kitti_infos[index])
         sample_idx = info['point_cloud']['lidar_idx']
-        calib = self.get_calib(sample_idx)
-        image_shape = info['image']['image_shape']
         data_dict = {
             'frame_id': sample_idx,
-            'calib': calib,
-            'image_shape': image_shape,
+            'colored_points': self.get_colored_points_in_fov(sample_idx), # (N, 7)
+            'calib': self.get_calib(sample_idx),
+            'image_shape': info['image']['image_shape'],
         }
         
-        get_item_list = self.dataset_cfg.get('GET_ITEM_LIST')
         if 'annos' in info:
             annos = info['annos']
             annos = common_utils.drop_info_with_name(annos, name='DontCare') # exclude class: DontCare
@@ -435,28 +471,29 @@ class KittiDataset(torch_data.Dataset):
                 'gt_names': annos['name'],
                 'road_plane': self.get_road_plane(sample_idx)
             })
-        if 'colored_points' in get_item_list:
-            data_dict['colored_points'] = self.get_colored_points_in_fov(sample_idx)
-        if 'image' in get_item_list:
-            data_dict['image'] = self.get_image(sample_idx)
         
-        data_dict = self.data_augmentor.forward(data_dict=data_dict) if self.data_augmentor else data_dict
         mask = common_utils.mask_points_by_range(data_dict['colored_points'], self.point_cloud_range)
         data_dict['colored_points'] = data_dict['colored_points'][mask]
         
         if data_dict.get('gt_boxes', None) is not None:
-            # Limit heading to [-pi, pi)
-            data_dict['gt_boxes'][:, 6] = common_utils.limit_period(data_dict['gt_boxes'][:, 6], offset=0.5, period=2 * np.pi) 
-            
             # Filter by the class: Car, Pedestrian, Cyclist
-            gt_boxes_mask = np.array([n in self.class_names for n in data_dict['gt_names']], dtype=np.bool)
-            data_dict['gt_boxes'] = data_dict['gt_boxes'][gt_boxes_mask]
-            data_dict['gt_names'] = data_dict['gt_names'][gt_boxes_mask]
+            mask = np.array([n in self.class_names for n in data_dict['gt_names']], dtype=np.bool)
+            data_dict['gt_boxes'] = data_dict['gt_boxes'][mask]
+            data_dict['gt_names'] = data_dict['gt_names'][mask]
+            
+            # Augment data
+            data_dict = self.data_augmentor.forward(data_dict) if self.data_augmentor else data_dict
+            
+            # Limit heading to [-pi, pi)
+            data_dict['gt_boxes'][:, 6] = common_utils.limit_period(
+                data_dict['gt_boxes'][:, 6], offset=0.5, period=2 * np.pi
+            )
             
             # Merge gt_boxes and gt_classes: Car - 1, Pedestrian - 2, Cyclist - 3
-            gt_classes = np.array([self.class_names.index(n) + 1 for n in data_dict['gt_names']], dtype=np.int32)
-            gt_boxes = np.concatenate((data_dict['gt_boxes'], gt_classes.reshape(-1, 1).astype(np.float32)), axis=1)
-            data_dict['gt_boxes'] = gt_boxes # (M', 8), [x, y, z, l, w, h, heading, class_id] in lidar coordinate system
+            gt_classes = [self.class_names.index(n) + 1 for n in data_dict['gt_names']]
+            data_dict['gt_boxes'] = np.concatenate(
+                [data_dict['gt_boxes'], np.array(gt_classes).reshape(-1, 1).astype(np.float32)], axis=1
+            ) # (M, 8), [x, y, z, l, w, h, heading, class_id] in lidar coordinates
             
             # Mask boxes outside range
             mask = box_utils.mask_boxes_outside_range_numpy(data_dict['gt_boxes'], self.point_cloud_range)
@@ -468,37 +505,11 @@ class KittiDataset(torch_data.Dataset):
                 return self.__getitem__(new_index)
                 
             shuffle_idx = np.random.permutation(data_dict['colored_points'].shape[0])
-            data_dict['colored_points'] = data_dict['colored_points'][shuffle_idx] # (N, 7)
+            data_dict['colored_points'] = data_dict['colored_points'][shuffle_idx]
         
-        # For ablation study
-        xs = data_dict['colored_points'][:, 0:1]
-        ys = data_dict['colored_points'][:, 1:2]
-        zs = data_dict['colored_points'][:, 2:3]
-        ranges = np.sqrt(xs ** 2 + ys ** 2 + zs ** 2)
-        intensities = data_dict['colored_points'][:, 3:4]
-        colors = data_dict['colored_points'][:, 4:7]
-        
-        # For normalization
-        xs = (xs - 15.91) / 10.74
-        ys = (ys - 0.1) / 7.16
-        zs = (zs - (-1.04)) / 0.82
-        ranges = (ranges - 17.23) / 11.23
-        intensities = (intensities - 0.24) / 0.15
-        colors = (colors - np.array((0.35, 0.36, 0.35), dtype=np.float32)) / np.array((0.27, 0.26, 0.26), dtype=np.float32)
-        
-        if self.used_feature_list == ['x', 'y', 'z', 'intensity', 'r', 'g', 'b']:
-            data_dict['point_features'] = np.concatenate([xs, ys, zs, intensities, colors], axis=1)
-        elif self.used_feature_list == ['x', 'y', 'z', 'intensity']:
-            data_dict['point_features'] = np.concatenate([xs, ys, zs, intensities], axis=1)
-        elif self.used_feature_list == ['r', 'g', 'b']:
-            data_dict['point_features'] = colors
-        elif self.used_feature_list == ['x', 'y', 'z', 'range', 'intensity']:
-            data_dict['point_features'] = np.concatenate([xs, ys, zs, ranges, intensities], axis=1)
-        elif self.used_feature_list == ['x', 'y', 'z', 'range', 'intensity', 'r', 'g', 'b']:
-            data_dict['point_features'] = np.concatenate([xs, ys, zs, ranges, intensities, colors], axis=1)
-        else:
-            raise NotImplementedError
-        
+        points = data_dict['colored_points']
+        features = self.get_point_features(points, self.used_feature_list, normalize=True)
+        data_dict['range_image'] = self.range_convertor.get_range_image(points, features)
         data_dict.pop('gt_names', None)
         data_dict.pop('road_plane', None)
         return data_dict
@@ -508,20 +519,15 @@ class KittiDataset(torch_data.Dataset):
         """
         Args:
             batch_list: list, [data_dict, data_dict, ...]
-        
         Returns:
             ret:
                 batch_size: int
-                frame_id: (batch_size), str, Sample index
+                frame_id: (batch_size), str, sample index
+                colored_points: (N1 + N2 + ..., 8), points of (batch_id, x, y, z, intensity, r, g, b)
                 calib: (batch_size), calibration_kitti.Calibration
                 image_shape: (batch_size, 2), H * W
-                gt_boxes: (batch_size, M_max, 8), [x, y, z, l, w, h, heading, class_id] in lidar coordinate system
-                colored_points: (N1 + N2 + ..., 8), Points of (batch_id, x, y, z, intensity, r, g, b)
-                random_world_flip_along_x: (batch_size), bool
-                random_world_rotation: (batch_size), float
-                random_world_scaling: (batch_size), float
-                point_features: (N1 + N2 + ..., used_point_features)
-                image: optional, (batch_size, H_max, W_max, 3), RGB Image
+                gt_boxes: (batch_size, M_max, 8), [x, y, z, l, w, h, heading, class_id] in lidar coordinates
+                range_image: (batch_size, used_point_features, 48, 512), front range image
         """
         data_dict = defaultdict(list)
         for cur_sample in batch_list:
@@ -530,12 +536,10 @@ class KittiDataset(torch_data.Dataset):
         batch_size = len(batch_list)
         ret = {}
         ret['batch_size'] = batch_size
-
+        
         for key, val in data_dict.items():
             try:
-                if key in ['point_features']:
-                    ret[key] = np.concatenate(val, axis=0)
-                elif key in ['colored_points']:
+                if key in ['colored_points']:
                     coors = []
                     for i, coor in enumerate(val):
                         coor_pad = np.pad(coor, ((0, 0), (1, 0)), mode='constant', constant_values=i)
@@ -547,28 +551,11 @@ class KittiDataset(torch_data.Dataset):
                     for k in range(batch_size):
                         batch_gt_boxes3d[k, :val[k].__len__(), :] = val[k]
                     ret[key] = batch_gt_boxes3d
-                elif key in ["images"]:
-                    # Get largest image size (H, W)
-                    max_h = 0
-                    max_w = 0
-                    for image in val:
-                        max_h = max(max_h, image.shape[0])
-                        max_w = max(max_w, image.shape[1])
-
-                    # Change size of images
-                    images = []
-                    for image in val:
-                        pad_h = common_utils.get_pad_params(desired_size=max_h, cur_size=image.shape[0])
-                        pad_w = common_utils.get_pad_params(desired_size=max_w, cur_size=image.shape[1])
-                        image_pad = np.pad(image, pad_width=(pad_h, pad_w, (0, 0)), mode='constant', constant_values=0)
-                        images.append(image_pad)
-                    ret[key] = np.stack(images, axis=0)
                 else:
                     ret[key] = np.stack(val, axis=0)
             except:
                 print('Error in collate_batch: key=%s' % key)
                 raise TypeError
-
         return ret
 
 

@@ -77,12 +77,9 @@ def draw_box(vis, boxes, labels=None, color=(1, 0, 0)):
         line_set = open3d.geometry.LineSet()
         line_set.points = open3d.utility.Vector3dVector(corners3d)
         line_set.lines = open3d.Vector2iVector(edges)
-        
         if labels is not None:
             line_set.paint_uniform_color(box_colormap[labels[i]])
         else:
             line_set.paint_uniform_color(color)
-
         vis.add_geometry(line_set)
-
     return vis
