@@ -20,7 +20,7 @@ DATA_CONFIG:
     AUGMENTOR_LIST:
         - NAME: gt_sampling
           DB_INFO_PATH: kitti_dbinfos_train.pkl # Use `kitti_dbinfos_trainval.pkl` if you want to train with the entire 7481 training samples.
-          FILTER_BY_MIN_POINTS: ['Car:15', 'Pedestrian:15', 'Cyclist:15']
+          FILTER_BY_MIN_POINTS: ['Car:10', 'Pedestrian:10', 'Cyclist:10']
           FILTER_BY_DIFFICULTY: [-1]
           SAMPLE_GROUPS: ['Car:5', 'Pedestrian:5', 'Cyclist:5']
           RANDOM_SAMPLING: True
