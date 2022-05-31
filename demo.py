@@ -70,23 +70,28 @@ def run(model, demo_dataset, data_dict, frame_id, args):
     f = demo_dataset.used_feature_list
     point_colors = data_dict['colored_points'][:, -3:] if set(['r', 'g', 'b']).issubset(set(f)) else None
     if args.show_gt_boxes and data_dict.get('gt_boxes', None) is not None:
-        gt_boxes, ref_labels = data_dict['gt_boxes'][0, :, :7], None
+        gt_boxes = data_dict['gt_boxes'][0, :, :7]
     else:
-        gt_boxes, ref_labels = None, [cfg.CLASS_NAMES[j - 1] for j in pred_dicts[0]['pred_labels']]
+        gt_boxes = None
     
     if args.onto_image:
         from utils import opencv_vis_utils as V
         V.draw_scenes(
             img=demo_dataset.get_image(frame_id)[:, :, ::-1],
-            calib=demo_dataset.get_calib(frame_id), gt_boxes=gt_boxes,
-            ref_boxes=pred_dicts[0]['pred_boxes'], ref_labels=ref_labels,
+            calib=demo_dataset.get_calib(frame_id),
+            gt_boxes=gt_boxes,
+            ref_boxes=pred_dicts[0]['pred_boxes'],
+            ref_labels=[cfg.CLASS_NAMES[j - 1] for j in pred_dicts[0]['pred_labels']],
             window_name=frame_id,
         )
     else:
         from utils import open3d_vis_utils as V
         V.draw_scenes(
-            points=data_dict['colored_points'][:, 1:4], gt_boxes=gt_boxes,
-            ref_boxes=pred_dicts[0]['pred_boxes'], ref_labels=ref_labels, point_colors=point_colors,
+            points=data_dict['colored_points'][:, 1:4],
+            gt_boxes=gt_boxes,
+            ref_boxes=pred_dicts[0]['pred_boxes'],
+            ref_labels=[cfg.CLASS_NAMES[j - 1] for j in pred_dicts[0]['pred_labels']],
+            point_colors=point_colors,
             window_name=frame_id,
         )
     print()

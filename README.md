@@ -3,7 +3,7 @@
 Implementation of MVMM in PyTorch for KITTI 3D Object Detetcion
 
 ## Acknowledgement
- - This repository references [open-mmlab](https://github.com/open-mmlab/OpenPCDet)'s work.
+ - This repository is developed based on [open-mmlab](https://github.com/open-mmlab/OpenPCDet)'s work.
 
 ## Installation
  - Clone this repository
@@ -67,23 +67,23 @@ Implementation of MVMM in PyTorch for KITTI 3D Object Detetcion
    ```
 
 ## Demo
- - Run the demo with a pretrained model
+ - Run the demo with a trained model
    ```
    # Run on the testing dataset
    python demo.py --ckpt=path_to_your_ckpt
    
-   # Run on a single file from the testing dataset
+   # Run on a single sample from the testing dataset
    python demo.py --ckpt=path_to_your_ckpt --sample_idx=000008
    ```
 
 ## Training
- - Run the command below to train
+ - Train your model using the following commands
    ```
    python train.py
    ```
 
 ## Evaluation
- - Run the command below to evaluate
+ - Evaluate your model using the following commands
    ```
    # Run on the testing dataset
    python test.py --ckpt=path_to_your_ckpt
@@ -94,4 +94,4 @@ Implementation of MVMM in PyTorch for KITTI 3D Object Detetcion
    # Run on the testing dataset and save results of KITTI3D format
    python test.py --ckpt=path_to_your_ckpt --save_to_file
    ```
-   
+
