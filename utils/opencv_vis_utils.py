@@ -62,7 +62,7 @@ def draw_scenes(img, calib, gt_boxes=None, ref_boxes=None, ref_labels=None,
             cv2.destroyWindow(window_name)
             break
         elif key == 13: # Enter
-            cv2.imwrite(window_name + '.png', (img * 255.0).astype(np.uint8))
+            cv2.imwrite(window_name + '.png', img)
             cv2.destroyWindow(window_name)
             break
         else:
@@ -87,7 +87,9 @@ def draw_box(img, calib, boxes, labels=None, color=(0, 0, 255), thickness=2):
     for i in range(boxes.shape[0]):
         corners3d = box_utils.boxes_to_corners_3d(np.array([boxes[i]]))[0]
         pts_rect = calib.lidar_to_rect(corners3d)
-        pts_img, _ = calib.rect_to_img(pts_rect) # [N', 2], [N']
+        pts_img, pts_rect_depth = calib.rect_to_img(pts_rect) # [8, 2], [8]
+        if (pts_rect_depth > 0).sum() < 8:
+            continue
         pts_img = pts_img.astype(np.int)
         color = box_colormap[labels[i]] if labels is not None else color
         cv2.line(img, (pts_img[0, 0], pts_img[0, 1]), (pts_img[5, 0], pts_img[5, 1]),color, thickness)
