@@ -15,7 +15,8 @@ from utils import range_image_utils, augmentor_utils
 
 
 class KittiDataset(torch_data.Dataset):
-    def __init__(self, dataset_cfg, class_names, training=True, logger=None, data_augmentation=True):
+    def __init__(self, dataset_cfg, class_names, training=True, logger=None, data_augmentation=True,
+        load_infos=True):
         self.class_names = class_names
         self.root_path = Path('data/kitti')
         if dataset_cfg:
@@ -25,11 +26,11 @@ class KittiDataset(torch_data.Dataset):
             if self.training:
                 self.set_split(dataset_cfg.SPLIT['train'])
                 self.data_augmentation = data_augmentation
-                self.prepare_data()
+                self.prepare_data(load_infos=load_infos)
             else:
                 self.set_split(dataset_cfg.SPLIT['test'])
                 self.data_augmentation = False
-                self.prepare_data()
+                self.prepare_data(load_infos=load_infos)
 
     def set_split(self, s):
         assert s in ['test.txt', 'train.txt', 'trainval.txt', 'val.txt']
@@ -39,17 +40,18 @@ class KittiDataset(torch_data.Dataset):
         self.data_path = self.root_path / ('testing' if self.split == 'test.txt' else 'training')
         self.info_file = self.root_path / ('kitti_infos_%s.pkl' % str(Path(self.split).stem))
 
-    def prepare_data(self):
-        if self.logger is not None:
-            self.logger.info('Loading KITTI dataset')
-        
-        self.kitti_infos = []
-        with open(self.info_file, 'rb') as f:
-            infos = pickle.load(f)
-        self.kitti_infos.extend(infos)
-        
-        if self.logger is not None:
-            self.logger.info('Total samples for KITTI dataset: %d' % (len(self.kitti_infos)))
+    def prepare_data(self, load_infos):
+        if load_infos:
+            if self.logger is not None:
+                self.logger.info('Loading KITTI dataset')
+            
+            self.kitti_infos = []
+            with open(self.info_file, 'rb') as f:
+                infos = pickle.load(f)
+            self.kitti_infos.extend(infos)
+            
+            if self.logger is not None:
+                self.logger.info('Total samples for KITTI dataset: %d' % (len(self.kitti_infos)))
         
         self.point_cloud_range = np.array(self.dataset_cfg.POINT_CLOUD_RANGE, dtype=np.float32)
         self.src_feature_list = self.dataset_cfg.SRC_FEATURE_LIST
