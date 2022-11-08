@@ -15,7 +15,7 @@ from utils import common_utils
 def parse_config():
     parser = argparse.ArgumentParser(description='arg parser')
     parser.add_argument('--cfg_file', type=str, default='data/config/ResNet_VFE.yaml',
-        help='specify the config for training')
+        help='specify the config')
     parser.add_argument('--training', action='store_true', default=False,
         help='whether to use training mode')
     parser.add_argument('--data_augmentation', action='store_true', default=False,
