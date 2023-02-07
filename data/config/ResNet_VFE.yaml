@@ -9,7 +9,7 @@ DATA_CONFIG:
     
     POINT_CLOUD_RANGE: [0, -40, -3, 70.4, 40, 1]
     SRC_FEATURE_LIST: ['x', 'y', 'z', 'intensity', 'r', 'g', 'b']
-    USED_FEATURE_LIST: ['x', 'y', 'z', 'range', 'intensity', 'r', 'g', 'b']
+    USED_FEATURE_LIST: ['x', 'y', 'z', 'intensity', 'r', 'g', 'b']
     
     RANGE_IMAGE_CONFIG:
         FULL_SIZE: [64, 2048]
