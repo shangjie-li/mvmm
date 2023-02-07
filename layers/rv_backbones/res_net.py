@@ -136,7 +136,7 @@ class ResNet(nn.Module):
             mask = batch_points[:, 0] == batch_idx
             points = batch_points[mask, :]
             range_image = batch_range_image[batch_idx, ...]
-            range_features = self.range_convertor.get_range_features(points, range_image)
+            range_features = self.range_convertor.get_range_features(points[:, 1:4], range_image)
             batch_rv_features.append(range_features)
         
         batch_rv_features = torch.cat(batch_rv_features, dim=0)
