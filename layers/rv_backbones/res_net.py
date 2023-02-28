@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
-from collections import OrderedDict
 
 
 class BottleNeck(nn.Module):
@@ -40,9 +38,10 @@ class BottleNeck(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, input_channels):
+    def __init__(self, in_channels):
         super().__init__()
-        self.input_channels = input_channels
+
+        self.in_channels = in_channels
         
         self.num_blocks = [3, 4, 6, 3]
         self.in_planes = 64
@@ -50,7 +49,7 @@ class Encoder(nn.Module):
         self.layers = nn.ModuleList()
         self.src_channels = []
         
-        self.conv1 = nn.Conv2d(self.input_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.conv1 = nn.Conv2d(self.in_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
         
@@ -92,10 +91,10 @@ class Decoder(nn.Module):
     def __init__(self, src_channels):
         super().__init__()
         
-        self.output_channels = 64
+        self.out_channels = 64
         self.lat_layers = nn.ModuleList()
         for c in reversed(src_channels):
-            self.lat_layers.append(nn.Conv2d(c, self.output_channels, kernel_size=1))
+            self.lat_layers.append(nn.Conv2d(c, self.out_channels, kernel_size=1))
     
     def forward(self, src_features):
         x = self.lat_layers[0](src_features[-1])
@@ -108,38 +107,37 @@ class Decoder(nn.Module):
 
 
 class ResNet(nn.Module):
-    def __init__(self, model_cfg, input_channels, range_convertor, **kwargs):
+    def __init__(self, cfg, range_convertor):
         super().__init__()
-        self.model_cfg = model_cfg
-        self.input_channels = input_channels
+
+        self.in_channels = 7  # (x, y, z, i, r, g, b)
         self.range_convertor = range_convertor
         
-        self.encoder = Encoder(self.input_channels)
+        self.encoder = Encoder(self.in_channels)
         self.decoder = Decoder(self.encoder.src_channels)
-        
-        assert len(self.model_cfg.FILTERS) > 0
-        self.num_rv_features = self.model_cfg.FILTERS[-1]
-        self.conv_1x1 = nn.Conv2d(self.decoder.output_channels, self.num_rv_features, kernel_size=1)
+
+        assert len(cfg['filters']) == 1
+        self.num_rv_features = cfg['filters'][-1]
+
+        self.conv_1x1 = nn.Conv2d(self.decoder.out_channels, self.num_rv_features, kernel_size=1)
     
-    def forward(self, batch_dict, **kwargs):
-        # colored_points: (N1 + N2 + ..., 8), points of (batch_id, x, y, z, intensity, r, g, b)
-        # range_image: (batch_size, used_point_features, 48, 512), front range image
-        batch_points = batch_dict['colored_points']
-        batch_range_image = batch_dict['range_image']
+    def forward(self, batch_dict):
+        batch_points = batch_dict['colored_points']  # [N1 + N2 + ..., 8], (batch_id, x, y, z, i, r, g, b)
+        batch_range_image = batch_dict['range_image']   # [batch_size, 7, 48, 512]
         batch_size = batch_dict['batch_size']
         
-        batch_range_image = self.decoder(self.encoder(batch_range_image))
-        batch_range_image = self.conv_1x1(batch_range_image)
+        x = self.decoder(self.encoder(batch_range_image))
+        x = self.conv_1x1(x)
         
         batch_rv_features = []
         for batch_idx in range(batch_size):
             mask = batch_points[:, 0] == batch_idx
-            points = batch_points[mask, :]
-            range_image = batch_range_image[batch_idx, ...]
+            points = batch_points[mask]
+            range_image = x[batch_idx, ...]
             range_features = self.range_convertor.get_range_features(points[:, 1:4], range_image)
             batch_rv_features.append(range_features)
         
         batch_rv_features = torch.cat(batch_rv_features, dim=0)
-        batch_dict['rv_features'] = batch_rv_features # (N1 + N2 + ..., num_rv_features)
+        batch_dict['rv_features'] = batch_rv_features  # [N1 + N2 + ..., num_rv_features]
         
         return batch_dict

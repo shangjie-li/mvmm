@@ -2,6 +2,7 @@ numpy<=1.20
 llvmlite
 numba
 torch>=1.1
+tensorboard
 tensorboardX
 easydict
 pyyaml
@@ -9,3 +10,5 @@ scikit-image
 tqdm
 torchvision
 SharedArray
+open3d-python
+opencv-python

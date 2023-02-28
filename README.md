@@ -12,8 +12,8 @@ Implementation of MVMM in PyTorch for KITTI 3D Object Detetcion
    ```
  - Install PyTorch environment with Anaconda (Tested on Ubuntu 16.04 & CUDA 10.2)
    ```
-   conda create -n pcdet.v0.5.0 python=3.6
-   conda activate pcdet.v0.5.0
+   conda create -n mvmm python=3.6
+   conda activate mvmm
    cd mvmm
    pip install -r requirements.txt
    ```
@@ -25,13 +25,6 @@ Implementation of MVMM in PyTorch for KITTI 3D Object Detetcion
    ```
    cd mvmm
    python setup.py develop
-   ```
- - Install visualization tools
-   ```
-   pip install mayavi
-   pip install pyqt5
-   pip install open3d-python
-   pip install opencv-python
    ```
 
 ## KITTI3D Dataset (41.5GB)
@@ -48,7 +41,9 @@ Implementation of MVMM in PyTorch for KITTI 3D Object Detetcion
    │   │   │   ├──calib & velodyne & label_2 & image_2 & planes
    │   │   │── testing
    │   │   │   ├──calib & velodyne & image_2
+   ├── helpers
    ├── layers
+   ├── ops
    ├── utils
    ```
  - Generate ground truth databases and data infos by running the following command
@@ -59,21 +54,21 @@ Implementation of MVMM in PyTorch for KITTI 3D Object Detetcion
    ```
  - Display the dataset
    ```
-   # Display the training dataset with data augmentation
-   python dataset_player.py --training --data_augmentation --show_boxes
+   # Display the dataset and show annotations in the range image
+   python dataset_player.py --augment_data --show_boxes --onto_range_image
    
-   # Display the testing dataset
-   python dataset_player.py --show_boxes
+   # Display the dataset and show annotations in point clouds
+   python dataset_player.py --augment_data --show_boxes
    ```
 
 ## Demo
  - Run the demo with a trained model
    ```
-   # Run on the testing dataset
-   python demo.py --ckpt=path_to_your_ckpt
+   # Show detections in the RGB image
+   python demo.py --checkpoint=checkpoints/checkpoint_epoch_80.pth --show_boxes --onto_image
    
-   # Run on a single sample from the testing dataset
-   python demo.py --ckpt=path_to_your_ckpt --sample_idx=000008
+   # Show detections in point clouds
+   python demo.py --checkpoint=checkpoints/checkpoint_epoch_80.pth --show_boxes
    ```
 
 ## Training
@@ -85,13 +80,5 @@ Implementation of MVMM in PyTorch for KITTI 3D Object Detetcion
 ## Evaluation
  - Evaluate your model using the following commands
    ```
-   # Run on the testing dataset
-   python test.py --ckpt=path_to_your_ckpt
-   
-   # Run on the testing dataset and display
-   python test.py --ckpt=path_to_your_ckpt --display
-   
-   # Run on the testing dataset and save results of KITTI3D format
-   python test.py --ckpt=path_to_your_ckpt --save_to_file
+   python test.py
    ```
-

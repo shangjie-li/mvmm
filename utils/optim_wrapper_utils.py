@@ -1,14 +1,15 @@
-# This file is modified from https://github.com/traveller59/second.pytorch
-
 try:
     from collections.abc import Iterable
 except:
     from collections import Iterable
 
+from functools import partial
+import numpy as np
 import torch
 from torch import nn
 from torch._utils import _unflatten_dense_tensors
 from torch.nn.utils import parameters_to_vector
+
 
 bn_types = (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d, nn.SyncBatchNorm)
 
@@ -100,7 +101,6 @@ def trainable_params(m: nn.Module):
 def is_tuple(x) -> bool: return isinstance(x, tuple)
 
 
-# copy from fastai.
 class OptimWrapper():
     "Basic wrapper around `opt` to simplify hyper-parameters changes."
 
@@ -131,7 +131,6 @@ class OptimWrapper():
     def __repr__(self) -> str:
         return f'OptimWrapper over {repr(self.opt)}.\nTrue weight decay: {self.true_wd}'
 
-    # Pytorch optimizer methods
     def step(self) -> None:
         "Set weight decay and step optimizer."
         # weight decay outside of optimizer step (AdamW)
@@ -155,7 +154,6 @@ class OptimWrapper():
         "Clear optimizer gradients."
         self.opt.zero_grad()
 
-    # Passthrough to the inner opt.
     def __getattr__(self, k: str):
         return getattr(self.opt, k, None)
 
@@ -165,7 +163,6 @@ class OptimWrapper():
         sd['state'] = {}
         self.load_state_dict(sd)
 
-    # Hyperparameters as properties
     @property
     def lr(self) -> float:
         return self._lr[-1]
@@ -210,7 +207,6 @@ class OptimWrapper():
         if not self.true_wd: self.set_val('weight_decay', listify(val, self._wd), bn_groups=self.bn_wd)
         self._wd = listify(val, self._wd)
 
-    # Helper functions
     def read_defaults(self) -> None:
         "Read the values inside the optimizer for the hyper-parameters."
         self._beta = None
@@ -235,30 +231,65 @@ class OptimWrapper():
         return val
 
 
-class FastAIMixedOptim(OptimWrapper):
-    @classmethod
-    def create(cls, opt_func, lr,
-               layer_groups, model, flat_master=False, loss_scale=512.0, **kwargs):
-        "Create an `optim.Optimizer` from `opt_func` with `lr`. Set lr on `layer_groups`."
-        opt = OptimWrapper.create(opt_func, lr, layer_groups, **kwargs)
-        opt.model_params, opt.master_params = get_master(layer_groups, flat_master)
-        opt.flat_master = flat_master
-        opt.loss_scale = loss_scale
-        opt.model = model
-        # Changes the optimizer so that the optimization step is done in FP32.
-        # opt = self.learn.opt
-        mom, wd, beta = opt.mom, opt.wd, opt.beta
-        lrs = [lr for lr in opt._lr for _ in range(2)]
-        opt_params = [{'params': mp, 'lr': lr} for mp, lr in zip(opt.master_params, lrs)]
-        opt.opt = opt_func(opt_params)
-        opt.mom, opt.wd, opt.beta = mom, wd, beta
-        return opt
+class LRSchedulerStep(object):
+    def __init__(self, fai_optimizer: OptimWrapper, total_step, lr_phases,
+                 mom_phases):
+        self.optimizer = fai_optimizer
+        self.total_step = total_step
+        self.lr_phases = []
 
-    def step(self):
-        model_g2master_g(self.model_params, self.master_params, self.flat_master)
-        for group in self.master_params:
-            for param in group: param.grad.div_(self.loss_scale)
-        super(FastAIMixedOptim, self).step()
-        self.model.zero_grad()
-        # Update the params from master to model.
-        master2model(self.model_params, self.master_params, self.flat_master)
+        for i, (start, lambda_func) in enumerate(lr_phases):
+            if len(self.lr_phases) != 0:
+                assert self.lr_phases[-1][0] < start
+            if isinstance(lambda_func, str):
+                lambda_func = eval(lambda_func)
+            if i < len(lr_phases) - 1:
+                self.lr_phases.append((int(start * total_step), int(lr_phases[i + 1][0] * total_step), lambda_func))
+            else:
+                self.lr_phases.append((int(start * total_step), total_step, lambda_func))
+        assert self.lr_phases[0][0] == 0
+        self.mom_phases = []
+        for i, (start, lambda_func) in enumerate(mom_phases):
+            if len(self.mom_phases) != 0:
+                assert self.mom_phases[-1][0] < start
+            if isinstance(lambda_func, str):
+                lambda_func = eval(lambda_func)
+            if i < len(mom_phases) - 1:
+                self.mom_phases.append((int(start * total_step), int(mom_phases[i + 1][0] * total_step), lambda_func))
+            else:
+                self.mom_phases.append((int(start * total_step), total_step, lambda_func))
+        assert self.mom_phases[0][0] == 0
+
+    def step(self, step):
+        for start, end, func in self.lr_phases:
+            if step >= start:
+                self.optimizer.lr = func((step - start) / (end - start))
+        for start, end, func in self.mom_phases:
+            if step >= start:
+                self.optimizer.mom = func((step - start) / (end - start))
+
+
+def annealing_cos(start, end, pct):
+    "Cosine anneal from `start` to `end` as pct goes from 0.0 to 1.0."
+    cos_out = np.cos(np.pi * pct) + 1
+    return end + (start - end) / 2 * cos_out
+
+
+class OneCycle(LRSchedulerStep):
+    def __init__(self, fai_optimizer, total_step, lr_max, moms, div_factor,
+                 pct_start):
+        self.lr_max = lr_max
+        self.moms = moms
+        self.div_factor = div_factor
+        self.pct_start = pct_start
+        a1 = int(total_step * self.pct_start)
+        a2 = total_step - a1
+        low_lr = self.lr_max / self.div_factor
+        lr_phases = ((0, partial(annealing_cos, low_lr, self.lr_max)),
+                     (self.pct_start,
+                      partial(annealing_cos, self.lr_max, low_lr / 1e4)))
+        mom_phases = ((0, partial(annealing_cos, *self.moms)),
+                      (self.pct_start, partial(annealing_cos,
+                                               *self.moms[::-1])))
+        fai_optimizer.lr, fai_optimizer.mom = low_lr, self.moms[0]
+        super().__init__(fai_optimizer, total_step, lr_phases, mom_phases)

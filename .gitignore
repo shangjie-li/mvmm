@@ -10,11 +10,10 @@ data/kitti/testing
 data/kitti/*.pkl
 *.pyc
 *.so
-output*
-weights
-final_results*
-SHANGJIELOG.md
-experiments*
+outputs
+checkpoints
+logs
 result.mp4
 result.txt
 results
+videos

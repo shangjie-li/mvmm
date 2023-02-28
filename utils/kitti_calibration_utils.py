@@ -1,6 +1,11 @@
 import numpy as np
 
 
+def parse_calib(calib_file):
+    calib = Calibration(calib_file)
+    return calib
+
+
 def get_calib_from_file(calib_file):
     with open(calib_file) as f:
         lines = f.readlines()
@@ -23,17 +28,12 @@ def get_calib_from_file(calib_file):
 class Calibration(object):
     def __init__(self, calib_file):
         """
-        Returns:
-            {lidar, (x, y, z)} --V2C--> {rect, (x, y, z)} --P2--> {img, (u, v)}
+        {lidar, (x, y, z)} --V2C--> {rect, (x, y, z)} --P2--> {img, (u, v)}
         """
-        if not isinstance(calib_file, dict):
-            calib = get_calib_from_file(calib_file)
-        else:
-            calib = calib_file
-
-        self.P2 = calib['P2']  # 3 x 4
-        self.R0 = calib['R0']  # 3 x 3, approximate identity matrixs
-        self.V2C = calib['Tr_velo2cam']  # 3 x 4
+        param = get_calib_from_file(calib_file)
+        self.P2 = param['P2']  # 3 x 4
+        self.R0 = param['R0']  # 3 x 3, approximate identity matrixs
+        self.V2C = param['Tr_velo2cam']  # 3 x 4
 
         # Camera intrinsics and extrinsics
         self.cu = self.P2[0, 2]

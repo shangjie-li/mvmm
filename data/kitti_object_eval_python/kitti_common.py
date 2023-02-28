@@ -1,5 +1,4 @@
 import concurrent.futures as futures
-import os
 import pathlib
 import re
 from collections import OrderedDict
@@ -188,6 +187,7 @@ def filter_kitti_anno(image_anno,
                     np.logical_not(boxes_to_remove)])
     return img_filtered_annotations
 
+
 def filter_annos_low_score(image_annos, thresh):
     new_image_annos = []
     for anno in image_annos:
@@ -200,6 +200,7 @@ def filter_annos_low_score(image_annos, thresh):
                 anno[key][relevant_annotation_indices])
         new_image_annos.append(img_filtered_annotations)
     return new_image_annos
+
 
 def kitti_result_line(result_dict, precision=4):
     prec_float = "{" + ":.{}f".format(precision) + "}"
@@ -329,6 +330,7 @@ def get_label_anno(label_path):
         annotations['score'] = np.zeros([len(annotations['bbox'])])
     return annotations
 
+
 def get_label_annos(label_folder, image_ids=None):
     if image_ids is None:
         filepaths = pathlib.Path(label_folder).glob('*.txt')
@@ -345,6 +347,7 @@ def get_label_annos(label_folder, image_ids=None):
         label_filename = label_folder / (image_idx + '.txt')
         annos.append(get_label_anno(label_filename))
     return annos
+
 
 def area(boxes, add1=False):
     """Computes area of boxes.

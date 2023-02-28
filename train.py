@@ -1,196 +1,99 @@
+import os
+import yaml
 import argparse
 import datetime
-import glob
-import os
-from pathlib import Path
-
-import torch
-import torch.nn as nn
 from tensorboardX import SummaryWriter
 
-from data import cfg, cfg_from_list, cfg_from_yaml_file, log_config_to_file
-from data import build_dataloader
-from mvmm import build_network, model_fn_decorator
-from test import repeat_eval_ckpt
-from utils import common_utils
-from utils.optimization_utils import build_optimizer, build_scheduler
-from utils.train_utils import train_model
+try:
+    import cv2
+except ImportError:
+    import sys
+    sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
+    import cv2
+
+from mvmm import build_model
+from helpers.dataloader_helper import build_train_loader
+from helpers.dataloader_helper import build_test_loader
+from helpers.optimizer_helper import build_optimizer
+from helpers.logger_helper import create_logger
+from helpers.logger_helper import log_cfg
+from helpers.random_seed_helper import set_random_seed
+from helpers.train_helper import Trainer
+from helpers.test_helper import Tester
 
 
 def parse_config():
     parser = argparse.ArgumentParser(description='arg parser')
-    parser.add_argument('--cfg_file', type=str, default='data/config/ResNet_VFE.yaml', help='specify the config for training')
-
-    parser.add_argument('--batch_size', type=int, default=None, required=False, help='batch size for training')
-    parser.add_argument('--epochs', type=int, default=None, required=False, help='number of epochs to train for')
-    parser.add_argument('--workers', type=int, default=4, help='number of workers for dataloader')
-    parser.add_argument('--extra_tag', type=str, default='', help='extra tag for this experiment')
-    parser.add_argument('--ckpt', type=str, default=None, help='checkpoint to start from')
-    parser.add_argument('--pretrained_model', type=str, default=None, help='pretrained_model')
-    parser.add_argument('--launcher', choices=['none', 'pytorch', 'slurm'], default='none')
-    parser.add_argument('--tcp_port', type=int, default=18888, help='tcp port for distrbuted training')
-    parser.add_argument('--sync_bn', action='store_true', default=False, help='whether to use sync bn')
-    parser.add_argument('--fix_random_seed', action='store_true', default=False, help='')
-    parser.add_argument('--ckpt_save_interval', type=int, default=1, help='number of training epochs')
-    parser.add_argument('--local_rank', type=int, default=0, help='local rank for distributed training')
-    parser.add_argument('--max_ckpt_save_num', type=int, default=30, help='max number of saved checkpoint')
-    parser.add_argument('--merge_all_iters_to_one_epoch', action='store_true', default=False, help='')
-    parser.add_argument('--set', dest='set_cfgs', default=None, nargs=argparse.REMAINDER,
-                        help='set extra config keys if needed')
-
-    parser.add_argument('--max_waiting_mins', type=int, default=0, help='max waiting minutes')
-    parser.add_argument('--start_epoch', type=int, default=0, help='')
-    parser.add_argument('--save_to_file', action='store_true', default=False, help='')
-
+    parser.add_argument('--cfg_file', type=str, default='data/configs/ResNet_VFE.yaml',
+                        help='path to the config file')
+    parser.add_argument('--batch_size', type=int, default=None,
+                        help='batch size for training and evaluating')
+    parser.add_argument('--epochs', type=int, default=None,
+                        help='number of epochs for training')
+    parser.add_argument('--result_dir', type=str, default='outputs/data',
+                        help='path to save detection results')
+    parser.add_argument('--resume_checkpoint', type=str, default=None,
+                        help='path to the checkpoint for resuming training')
     args = parser.parse_args()
+    return args
 
-    cfg_from_yaml_file(args.cfg_file, cfg)
-    cfg.TAG = ''
-    cfg.EXP_GROUP_PATH = ''
-
-    if args.set_cfgs is not None:
-        cfg_from_list(args.set_cfgs, cfg)
-
-    return args, cfg
-    
 
 def main():
-    args, cfg = parse_config()
-    if args.launcher == 'none':
-        dist_train = False
-        total_gpus = 1
-    else:
-        total_gpus, cfg.LOCAL_RANK = getattr(common_utils, 'init_dist_%s' % args.launcher)(
-            args.tcp_port, args.local_rank, backend='nccl'
-        )
-        dist_train = True
+    args = parse_config()
+    assert os.path.exists(args.cfg_file)
+    cfg = yaml.load(open(args.cfg_file, 'r'), Loader=yaml.Loader)
 
-    if args.batch_size is None:
-        args.batch_size = cfg.OPTIMIZATION.BATCH_SIZE_PER_GPU
-    else:
-        assert args.batch_size % total_gpus == 0, 'Batch size should match the number of gpus'
-        args.batch_size = args.batch_size // total_gpus
+    if args.batch_size is not None:
+        cfg['dataset']['batch_size'] = args.batch_size
 
-    args.epochs = cfg.OPTIMIZATION.NUM_EPOCHS if args.epochs is None else args.epochs
+    if args.epochs is not None:
+        cfg['trainer']['epochs'] = args.epochs
+        cfg['trainer']['save_frequency'] = min(args.epochs, cfg['trainer']['save_frequency'])
+        cfg['tester']['checkpoint'] = 'checkpoints/checkpoint_epoch_%d.pth' % args.epochs
 
-    if args.fix_random_seed:
-        common_utils.set_random_seed(666)
+    if args.resume_checkpoint is not None:
+        cfg['trainer']['resume_checkpoint'] = args.resume_checkpoint
 
-    output_dir = cfg.ROOT_DIR / 'output' / cfg.EXP_GROUP_PATH / cfg.TAG / args.extra_tag
-    ckpt_dir = output_dir / 'ckpt'
-    output_dir.mkdir(parents=True, exist_ok=True)
-    ckpt_dir.mkdir(parents=True, exist_ok=True)
+    log_dir = 'logs'
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, 'log_train_%s.txt' % datetime.datetime.now().strftime('%Y%m%d_%H%M%S'))
+    logger = create_logger(log_file)
+    log_cfg(args, cfg, logger)
 
-    log_file = output_dir / ('log_train_%s.txt' % datetime.datetime.now().strftime('%Y%m%d-%H%M%S'))
-    logger = common_utils.create_logger(log_file, rank=cfg.LOCAL_RANK)
+    tb_logger = SummaryWriter(log_dir=log_dir)
 
-    # log to file
-    logger.info('**********************Start logging**********************')
-    gpu_list = os.environ['CUDA_VISIBLE_DEVICES'] if 'CUDA_VISIBLE_DEVICES' in os.environ.keys() else 'ALL'
-    logger.info('CUDA_VISIBLE_DEVICES=%s' % gpu_list)
+    logger.info('###################  Training  ###################')
+    set_random_seed(cfg['random_seed'])
 
-    if dist_train:
-        logger.info('total_batch_size: %d' % (total_gpus * args.batch_size))
-    for key, val in vars(args).items():
-        logger.info('{:16} {}'.format(key, val))
-    log_config_to_file(cfg, logger=logger)
-    if cfg.LOCAL_RANK == 0:
-        os.system('cp %s %s' % (args.cfg_file, output_dir))
+    train_loader = build_train_loader(cfg['dataset'], cfg['trainer']['split'])
+    test_loader = build_test_loader(cfg['dataset'], cfg['tester']['split'])
 
-    tb_log = SummaryWriter(log_dir=str(output_dir / 'tensorboard')) if cfg.LOCAL_RANK == 0 else None
+    model = build_model(cfg['model'], dataset=train_loader.dataset)
 
-    # -----------------------create dataloader & network & optimizer---------------------------
-    train_set, train_loader, train_sampler = build_dataloader(
-        dataset_cfg=cfg.DATA_CONFIG,
-        class_names=cfg.CLASS_NAMES,
-        batch_size=args.batch_size,
-        dist=dist_train, workers=args.workers,
-        logger=logger,
-        training=True,
-        merge_all_iters_to_one_epoch=args.merge_all_iters_to_one_epoch,
-        total_epochs=args.epochs
-    )
+    total_iters_each_epoch = len(train_loader)
+    total_epochs = cfg['trainer']['epochs']
+    optimizer, lr_scheduler = build_optimizer(cfg['optimizer'], model, total_iters_each_epoch, total_epochs)
 
-    model = build_network(model_cfg=cfg.MODEL, num_class=len(cfg.CLASS_NAMES), dataset=train_set)
-    if args.sync_bn:
-        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-    model.cuda()
-
-    optimizer = build_optimizer(model, cfg.OPTIMIZATION)
-
-    # load checkpoint if it is possible
-    start_epoch = it = 0
-    last_epoch = -1
-    if args.pretrained_model is not None:
-        model.load_params_from_file(filename=args.pretrained_model, to_cpu=dist_train, logger=logger)
-
-    if args.ckpt is not None:
-        it, start_epoch = model.load_params_with_optimizer(args.ckpt, to_cpu=dist_train, optimizer=optimizer, logger=logger)
-        last_epoch = start_epoch + 1
-    else:
-        ckpt_list = glob.glob(str(ckpt_dir / '*checkpoint_epoch_*.pth'))
-        if len(ckpt_list) > 0:
-            ckpt_list.sort(key=os.path.getmtime)
-            it, start_epoch = model.load_params_with_optimizer(
-                ckpt_list[-1], to_cpu=dist_train, optimizer=optimizer, logger=logger
-            )
-            last_epoch = start_epoch + 1
-
-    model.train()  # before wrap to DistributedDataParallel to support fixed some parameters
-    if dist_train:
-        model = nn.parallel.DistributedDataParallel(model, device_ids=[cfg.LOCAL_RANK % torch.cuda.device_count()])
-    logger.info(model)
-
-    lr_scheduler, lr_warmup_scheduler = build_scheduler(
-        optimizer, total_iters_each_epoch=len(train_loader), total_epochs=args.epochs,
-        last_epoch=last_epoch, optim_cfg=cfg.OPTIMIZATION
-    )
-
-    # -----------------------start training---------------------------
-    logger.info('**********************Start training %s/%s(%s)**********************'
-                % (cfg.EXP_GROUP_PATH, cfg.TAG, args.extra_tag))
-    train_model(
-        model,
-        optimizer,
-        train_loader,
-        model_func=model_fn_decorator(),
+    trainer = Trainer(
+        cfg=cfg['trainer'],
+        model=model,
+        optimizer=optimizer,
         lr_scheduler=lr_scheduler,
-        optim_cfg=cfg.OPTIMIZATION,
-        start_epoch=start_epoch,
-        total_epochs=args.epochs,
-        start_iter=it,
-        rank=cfg.LOCAL_RANK,
-        tb_log=tb_log,
-        ckpt_save_dir=ckpt_dir,
-        train_sampler=train_sampler,
-        lr_warmup_scheduler=lr_warmup_scheduler,
-        ckpt_save_interval=args.ckpt_save_interval,
-        max_ckpt_save_num=args.max_ckpt_save_num,
-        merge_all_iters_to_one_epoch=args.merge_all_iters_to_one_epoch
+        data_loader=train_loader,
+        logger=logger,
+        tb_logger=tb_logger,
     )
+    trainer.train()
 
-    logger.info('**********************End training %s/%s(%s)**********************\n\n\n'
-                % (cfg.EXP_GROUP_PATH, cfg.TAG, args.extra_tag))
-
-    logger.info('**********************Start evaluation %s/%s(%s)**********************' %
-                (cfg.EXP_GROUP_PATH, cfg.TAG, args.extra_tag))
-    test_set, test_loader, sampler = build_dataloader(
-        dataset_cfg=cfg.DATA_CONFIG,
-        class_names=cfg.CLASS_NAMES,
-        batch_size=args.batch_size,
-        dist=dist_train, workers=args.workers, logger=logger, training=False
+    logger.info('###################  Evaluation  ###################')
+    tester = Tester(
+        cfg=cfg['tester'],
+        model=model,
+        data_loader=test_loader,
+        result_dir=args.result_dir,
+        logger=logger
     )
-    eval_output_dir = output_dir / 'eval' / 'eval_with_train'
-    eval_output_dir.mkdir(parents=True, exist_ok=True)
-    args.start_epoch = max(args.epochs - 0, 0)  # Only evaluate the last 10 epochs
-
-    repeat_eval_ckpt(
-        model.module if dist_train else model,
-        test_loader, args, eval_output_dir, logger, ckpt_dir,
-        dist_test=dist_train
-    )
-    logger.info('**********************End evaluation %s/%s(%s)**********************' %
-                (cfg.EXP_GROUP_PATH, cfg.TAG, args.extra_tag))
+    tester.test()
 
 
 if __name__ == '__main__':

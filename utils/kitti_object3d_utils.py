@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def get_objects_from_label(label_file):
+def parse_objects(label_file):
     with open(label_file, 'r') as f:
         lines = f.readlines()
     objects = [Object3d(line) for line in lines]
@@ -12,7 +12,7 @@ class Object3d(object):
     def __init__(self, line):
         """
         Args:
-            line: str, Objects labeled with (cls_type, truncation, occlusion, alpha,
+            line: str, (cls_type, truncation, occlusion, alpha,
                 box2d_x1, box2d_y1, box2d_x2, box2d_y2, h, w, l, loc_x, loc_y, loc_z, rotation_y)
         """
         label = line.strip().split(' ')

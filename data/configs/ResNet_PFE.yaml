@@ -1,0 +1,95 @@
+random_seed: 444
+
+dataset:
+  type: 'KITTI'
+  batch_size: 4
+  class_names: ['Car', 'Pedestrian', 'Cyclist']
+  write_list: ['Car', 'Pedestrian', 'Cyclist']
+  point_cloud_range: [0, -39.68, -3, 69.12, 39.68, 1]
+
+  range_image:
+    full_size: [2048, 64]
+    front_size: [512, 48]
+
+  augmentor_list:
+    - type: 'gt_sampling'
+      db_info_path: 'kitti_dbinfos_train.pkl'  # Use `kitti_dbinfos_trainval.pkl` if you want to train with the entire 7481 training samples.
+      filter_by_min_points: ['Car:10', 'Pedestrian:10', 'Cyclist:10']
+      filter_by_difficulty: [-1]
+      sample_groups: ['Car:5', 'Pedestrian:5', 'Cyclist:5']
+      random_sample: True
+
+    - type: 'random_rotation'
+      rotation_range: [-0.78539816, 0.78539816]
+
+    - type: 'random_scaling'
+      scaling_range: [0.95, 1.05]
+
+    - type: 'random_flip'
+
+model:
+  type: 'MVMM'
+
+  rv_backbone:
+    type: 'ResNet'
+    filters: [4]
+
+  pv_bridge:
+    type: 'PFE'
+    pillar_size: [0.16, 0.16, 4]
+    filters: [64]
+
+  bev_backbone:
+    type: 'BaseBEVBackbone'
+    num_layers: [3, 5, 5]
+    downsample_strides: [2, 2, 2]
+    downsample_filters: [64, 128, 256]
+    upsample_strides: [1, 2, 4]
+    upsample_filters: [128, 128, 128]
+
+  head:
+    type: 'AnchorHead'
+    feature_map_stride: 2
+
+    loss_weights:
+      cls_weight: 1.0
+      loc_weight: 2.0
+      dir_weight: 0.2
+
+    anchor_list:
+      - name: 'Car'
+        sizes: [[3.9, 1.6, 1.56]]
+        rotations: [0, 1.57]
+        z_centers: [-1.0]
+        matched_threshold: 0.6
+        unmatched_threshold: 0.45
+
+      - name: 'Pedestrian'
+        sizes: [[0.8, 0.6, 1.73]]
+        rotations: [0, 1.57]
+        z_centers: [-1.0]
+        matched_threshold: 0.5
+        unmatched_threshold: 0.35
+
+      - name: 'Cyclist'
+        sizes: [[1.76, 0.6, 1.73]]
+        rotations: [0, 1.57]
+        z_centers: [-1.0]
+        matched_threshold: 0.5
+        unmatched_threshold: 0.35
+
+optimizer:
+  type: 'AdamOneCycle'
+  lr: 0.003
+  weight_decay: 0.01
+
+trainer:
+  split: 'train'  # Use `trainval` if you want to train with the entire 7481 training samples.
+  epochs: 80
+  save_frequency: 80
+
+tester:
+  split: 'val'  # Use `test` if you want to run on the 7518 testing samples.
+  score_thresh: 0.1
+  nms_thresh: 0.1
+  checkpoint: 'checkpoints/checkpoint_epoch_80.pth'

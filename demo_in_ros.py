@@ -1,19 +1,19 @@
+import os
 import argparse
-import glob
+import yaml
 from pathlib import Path
 import time
-import os
-import sys
 import math
 import threading
+import numpy as np
+import torch
+import matplotlib.pyplot as plt  # for WARNING: QApplication was not created in the main() thread.
 
 import rospy
 from std_msgs.msg import Header
 from sensor_msgs.msg import Image
 from sensor_msgs.msg import PointCloud2
 from visualization_msgs.msg import Marker, MarkerArray
-
-import matplotlib.pyplot as plt
 
 try:
     import cv2
@@ -22,16 +22,16 @@ except ImportError:
     sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
     import cv2
 
-import numpy as np
-import torch
-
-from data import cfg, cfg_from_yaml_file
-from data import KittiDataset
-from mvmm import build_network, load_data_to_gpu
-from utils import common_utils, calibration_kitti
-from utils import range_image_utils, augmentor_utils
-from utils import opencv_vis_utils
-from utils import numpy_pc2
+from data.kitti_dataset import KITTIDataset
+from mvmm import build_model
+from helpers.checkpoint_helper import load_checkpoint
+from utils.kitti_calibration_utils import parse_calib
+from utils.point_cloud_utils import get_fov_flag
+from utils.point_cloud_utils import mask_points_by_range
+from utils.opencv_vis_utils import box_colormap
+from utils.opencv_vis_utils import normalize_img
+from utils.opencv_vis_utils import draw_boxes3d
+from utils.numpy_pc2_utils import pointcloud2_to_xyzi_array
 
 
 image_lock = threading.Lock()
@@ -40,37 +40,32 @@ lidar_lock = threading.Lock()
 
 def parse_config():
     parser = argparse.ArgumentParser(description='arg parser')
-    parser.add_argument('--cfg_file', type=str, default='data/config/ResNet_VFE.yaml',
-                        help='specify the config file')
-    parser.add_argument('--ckpt', type=str, default=None,
-                        help='specify the pretrained model')
+    parser.add_argument('--cfg_file', type=str, default='data/configs/ResNet_VFE.yaml',
+                        help='path to the config file')
     parser.add_argument('--display', action='store_true', default=False,
-                        help='whether to display results onto the RGB image')
+                        help='whether to show the RGB image')
     parser.add_argument('--print', action='store_true', default=False,
                         help='whether to print results in the txt file')
-    parser.add_argument('--score_thresh', type=float, default=0.1,
-                        help='specify the score threshold')
+    parser.add_argument('--score_thresh', type=float, default=None,
+                        help='score threshold for filtering detections')
+    parser.add_argument('--nms_thresh', type=float, default=None,
+                        help='NMS threshold for filtering detections')
+    parser.add_argument('--checkpoint', type=str, default=None,
+                        help='path to the checkpoint')
     parser.add_argument('--sub_image', type=str, default='/kitti/camera_color_left/image_raw',
-                        help='the image topic to subscribe')
+                        help='image topic to subscribe')
     parser.add_argument('--sub_lidar', type=str, default='/kitti/velo/pointcloud',
-                        help='the lidar topic to subscribe')
+                        help='lidar topic to subscribe')
     parser.add_argument('--pub_marker', type=str, default='/result',
-                        help='the marker topic to publish')
+                        help='marker topic to publish')
     parser.add_argument('--frame_rate', type=int, default=10,
                         help='working frequency')
     parser.add_argument('--frame_id', type=str, default=None,
-                        help='frame id for ROS msg (same as lidar topic by default)')
+                        help='frame id for ROS message (same as lidar topic by default, which is `velo_link`)')
     parser.add_argument('--calib_file', type=str, default='data/kitti/testing/calib/000000.txt',
-                        help='specify the calibration file')
-
+                        help='path to the calibration file')
     args = parser.parse_args()
-
-    cfg_from_yaml_file(args.cfg_file, cfg)
-
-    if args.score_thresh:
-        cfg.MODEL.POST_PROCESSING.SCORE_THRESH = args.score_thresh
-
-    return args, cfg
+    return args
 
 
 def publish_marker_msg(pub, boxes, labels, frame_id, frame_rate, color_map):
@@ -100,7 +95,7 @@ def publish_marker_msg(pub, boxes, labels, frame_id, frame_rate, color_map):
         marker.color.r = color_map[labels[i]][2] / 255.0
         marker.color.g = color_map[labels[i]][1] / 255.0
         marker.color.b = color_map[labels[i]][0] / 255.0
-        marker.color.a = 0.75 # 0 for invisible
+        marker.color.a = 0.75  # 0 for invisible
         
         marker.lifetime = rospy.Duration(1 / frame_rate)
         markerarray.markers.append(marker)
@@ -138,12 +133,50 @@ def print_info(frame, stamp, delay, labels, scores, boxes, file_name='result.txt
         fob.write('\n')
 
 
+def create_input_data(dataset, image, points, calib, frame_id):
+    image = image[:, :, ::-1].astype(np.float32) / 255.0  # ndarray of float32, [H, W, 3], RGB image
+    image_shape = np.array(image.shape[:2], dtype=np.int32)
+    mask = get_fov_flag(points, image_shape, calib)
+    points = points[mask]
+
+    pts_img, pts_rect_depth = calib.lidar_to_img(points[:, 0:3])
+    pts_img = pts_img.astype(np.int)
+    rgb = image[pts_img[:, 1], pts_img[:, 0], :]
+    colored_points = np.concatenate([points, rgb], axis=1)
+
+    data_dict = {
+        'frame_id': frame_id,
+        'colored_points': colored_points,
+        'calib': calib,
+        'image_shape': image_shape,
+    }
+    data_dict['colored_points'] = mask_points_by_range(data_dict['colored_points'], dataset.point_cloud_range)
+
+    points = data_dict['colored_points']
+
+    xs = points[:, 0:1]
+    ys = points[:, 1:2]
+    zs = points[:, 2:3]
+    intensities = points[:, 3:4]
+    colors = points[:, 4:7]
+
+    xmin, ymin, zmin, xmax, ymax, zmax = dataset.point_cloud_range
+    xs = (xs - xmin) / (xmax - xmin)
+    ys = (ys - ymin) / (ymax - ymin)
+    zs = (zs - zmin) / (zmax - zmin)
+
+    point_features = np.concatenate([xs, ys, zs, intensities, colors], axis=1)
+    data_dict['range_image'] = dataset.range_convertor.get_range_image(points, point_features)
+
+    return data_dict
+
+
 def image_callback(image):
     global image_header, image_frame
     image_lock.acquire()
     if image_header is None:
         image_header = image.header
-    image_frame = np.frombuffer(image.data, dtype=np.uint8).reshape(image.height, image.width, -1)
+    image_frame = np.frombuffer(image.data, dtype=np.uint8).reshape(image.height, image.width, -1)  # ndarray of uint8, [H, W, 3], BGR image
     image_lock.release()
 
 
@@ -152,123 +185,120 @@ def lidar_callback(lidar):
     lidar_lock.acquire()
     if lidar_header is None:
         lidar_header = lidar.header
-    lidar_frame = numpy_pc2.pointcloud2_to_xyzi_array(lidar, remove_nans=True)
+    lidar_frame = pointcloud2_to_xyzi_array(lidar, remove_nans=True)
     lidar_lock.release()
 
 
 def timer_callback(event):
-    global image_frame
     image_lock.acquire()
     cur_image = image_frame.copy()
     image_lock.release()
-    
-    global lidar_frame
+
     lidar_lock.acquire()
     cur_lidar = lidar_frame.copy()
     lidar_lock.release()
-    
+
     global frame
     frame += 1
     start = time.time()
-    d = demo_dataset
-    frame_id = args.frame_id
-    image_shape = np.array(cur_image.shape[:2], dtype=np.int32)
-    
-    points = cur_lidar[d.get_fov_flag(cur_lidar, image_shape, calib)]
-    pts_rect = calib.lidar_to_rect(points[:, 0:3])
-    pts_img, pts_rect_depth = calib.rect_to_img(pts_rect) # [N', 2], [N']
-    pts_img = pts_img.astype(np.int)
-    rgb = cur_image[pts_img[:, 1], pts_img[:, 0], :] # [N', 3]
-    points = np.concatenate([points, rgb], axis=1)
-    
-    data_dict = {
-        'frame_id': frame_id,
-        'colored_points': points, # (N, 7)
-        'calib': calib,
-        'image_shape': image_shape,
-    }
-    mask = common_utils.mask_points_by_range(data_dict['colored_points'], d.point_cloud_range)
-    data_dict['colored_points'] = data_dict['colored_points'][mask]
-    points = data_dict['colored_points']
-    features = d.get_point_features(points, d.used_feature_list, normalize=True)
-    data_dict['range_image'] = d.range_convertor.get_range_image(points, features)
-    data_dict = d.collate_batch([data_dict])
-    
+
+    data_dict = create_input_data(dataset, cur_image, cur_lidar, calib, args.frame_id)
+
+    batch_dict = dataset.collate_batch([data_dict])
+    batch_dict = dataset.load_data_to_gpu(batch_dict, device)
+
     with torch.no_grad():
-        load_data_to_gpu(data_dict)
-        pred_dicts, _ = model.forward(data_dict)
-    
-    ref_boxes = pred_dicts[0]['pred_boxes'].cpu().numpy()
-    ref_labels = [cfg.CLASS_NAMES[j - 1] for j in pred_dicts[0]['pred_labels']]
-    ref_scores = pred_dicts[0]['pred_scores'].cpu().numpy()
-    publish_marker_msg(pub_marker, ref_boxes, ref_labels,
-        frame_id=args.frame_id, frame_rate=args.frame_rate,
-        color_map=opencv_vis_utils.box_colormap
-    )
-    
+        batch_dict = model(
+            batch_dict, score_thresh=cfg['tester']['score_thresh'], nms_thresh=cfg['tester']['nms_thresh']
+        )
+
+    pred_boxes = batch_dict['pred_boxes'][0].cpu().numpy()  # [M, 7]
+    pred_classes = batch_dict['pred_classes'][0].cpu().numpy()  # [M]
+    pred_scores = batch_dict['pred_scores'][0].cpu().numpy()  # [M]
+    pred_names = [dataset.class_names[int(k - 1)] for k in pred_classes]
+
+    publish_marker_msg(pub_marker, pred_boxes, pred_names, args.frame_id, args.frame_rate, box_colormap)
+
     if args.display:
-        if ref_boxes is not None:
-            cur_image = opencv_vis_utils.draw_box(cur_image, calib, ref_boxes, ref_labels)
-        if not display(cur_image, v_writer, win_name='result'):
+        image = normalize_img(cur_image)
+        image = draw_boxes3d(image, calib, pred_boxes, pred_names)
+        if not display(image, v_writer, win_name='result'):
             print("\nReceived the shutdown signal.\n")
             rospy.signal_shutdown("Everything is over now.")
-    
+
     if args.print:
         cur_stamp = rospy.Time.now()
         cur_stamp = cur_stamp.secs + 0.000000001 * cur_stamp.nsecs
         delay = round(time.time() - start, 3)
-        print_info(frame, cur_stamp, delay, ref_labels, ref_scores, ref_boxes, result_file)
+        print_info(frame, cur_stamp, delay, pred_names, pred_scores, pred_boxes, result_file)
 
 
 if __name__ == '__main__':
-    args, cfg = parse_config()
-    logger = common_utils.create_logger()
-    logger.info('-----------------Quick Demo of MVMM in ROS-------------------------')
-    
+    args = parse_config()
+    assert os.path.exists(args.cfg_file)
+    cfg = yaml.load(open(args.cfg_file, 'r'), Loader=yaml.Loader)
+
+    if args.score_thresh is not None:
+        cfg['tester']['score_thresh'] = args.score_thresh
+    if args.nms_thresh is not None:
+        cfg['tester']['nms_thresh'] = args.nms_thresh
+    if args.checkpoint is not None:
+        cfg['tester']['checkpoint'] = args.checkpoint
+
     rospy.init_node("mvmm", anonymous=True, disable_signals=True)
     frame = 0
-    
-    demo_dataset = KittiDataset(
-        dataset_cfg=cfg.DATA_CONFIG, class_names=cfg.CLASS_NAMES, training=False, logger=logger,
-        load_infos=False
+
+    if cfg['dataset']['type'] == 'KITTI':
+        dataset = KITTIDataset(cfg['dataset'], split=cfg['tester']['split'], augment_data=False)
+    else:
+        raise NotImplementedError
+
+    model = build_model(cfg['model'], dataset)
+
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    model = model.to(device)
+
+    assert os.path.exists(cfg['tester']['checkpoint'])
+    load_checkpoint(
+        file_name=cfg['tester']['checkpoint'],
+        model=model,
+        optimizer=None,
+        map_location=device,
+        logger=None,
     )
-    model = build_network(model_cfg=cfg.MODEL, num_class=len(cfg.CLASS_NAMES), dataset=demo_dataset)
-    model.load_params_from_file(filename=args.ckpt, logger=logger, to_cpu=True)
-    model.cuda()
+
+    torch.set_grad_enabled(False)
     model.eval()
-    
+
     calib_file = Path(args.calib_file)
-    assert calib_file.exists(), 'Calibration file not found: %s' % calib_file
-    calib = calibration_kitti.Calibration(calib_file)
-    
+    assert os.path.exists(calib_file)
+    calib = parse_calib(calib_file)
+
     image_header, image_frame = None, None
     lidar_header, lidar_frame = None, None
-    rospy.Subscriber(args.sub_image, Image, image_callback, queue_size=1,
-        buff_size=52428800)
-    rospy.Subscriber(args.sub_lidar, PointCloud2, lidar_callback, queue_size=1,
-        buff_size=52428800)
+    rospy.Subscriber(args.sub_image, Image, image_callback, queue_size=1, buff_size=52428800)
+    rospy.Subscriber(args.sub_lidar, PointCloud2, lidar_callback, queue_size=1, buff_size=52428800)
+    print('==> Waiting for topic %s and %s...' % (args.sub_image, args.sub_lidar))
     while image_frame is None or lidar_frame is None:
         time.sleep(0.1)
-        print('Waiting for topic %s and %s...' % (args.sub_image, args.sub_lidar))
-    print('  Done.\n')
-    
+    print('==> Done.')
+
     if args.frame_id is None:
         args.frame_id = lidar_header.frame_id
-    
+
     if args.display:
         win_h, win_w = image_frame.shape[0], image_frame.shape[1]
         v_path = 'result.mp4'
         v_format = cv2.VideoWriter_fourcc(*"mp4v")
         v_writer = cv2.VideoWriter(v_path, v_format, args.frame_rate, (win_w, win_h), True)
-    
+
     if args.print:
         result_file = 'result.txt'
         with open(result_file, 'w') as fob:
             fob.seek(0)
             fob.truncate()
-    
+
     pub_marker = rospy.Publisher(args.pub_marker, MarkerArray, queue_size=1)
     rospy.Timer(rospy.Duration(1 / args.frame_rate), timer_callback)
-    
-    rospy.spin()
 
+    rospy.spin()
