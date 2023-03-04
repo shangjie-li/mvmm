@@ -80,12 +80,11 @@ def run(dataset, args, data_dict):
     range_image = data_dict['range_image']
     colored_points = data_dict['colored_points']
 
-    if args.show_boxes:
+    boxes = None
+    names = None
+    if args.show_boxes and data_dict.get('gt_boxes') is not None:
         boxes = data_dict['gt_boxes'][:, :7]
         names = [dataset.class_names[int(k - 1)] for k in data_dict['gt_boxes'][:, 7]]
-    else:
-        boxes = None
-        names = None
 
     visualize(
         dataset, args, frame_id, image, range_image, colored_points, boxes, names
@@ -103,7 +102,7 @@ if __name__ == '__main__':
               'because the augmented objects cannot be shown in the RGB image.')
 
     if cfg['dataset']['type'] == 'KITTI':
-        dataset = KITTIDataset(cfg['dataset'], split=args.split, augment_data=args.augment_data)
+        dataset = KITTIDataset(cfg['dataset'], split=args.split, is_training=False, augment_data=args.augment_data)
     else:
         raise NotImplementedError
 

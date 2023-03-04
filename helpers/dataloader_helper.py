@@ -28,7 +28,7 @@ def build_train_loader(cfg, split, num_workers=4):
 
 def build_test_loader(cfg, split, num_workers=4):
     if cfg['type'] == 'KITTI':
-        dataset = KITTIDataset(cfg, split)
+        dataset = KITTIDataset(cfg, split, is_training=False, augment_data=False)
     else:
         raise NotImplementedError
 

@@ -249,7 +249,7 @@ if __name__ == '__main__':
     frame = 0
 
     if cfg['dataset']['type'] == 'KITTI':
-        dataset = KITTIDataset(cfg['dataset'], split=cfg['tester']['split'], augment_data=False)
+        dataset = KITTIDataset(cfg['dataset'], split=cfg['tester']['split'], is_training=False, augment_data=False)
     else:
         raise NotImplementedError
 

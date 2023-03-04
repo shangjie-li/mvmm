@@ -24,7 +24,7 @@ class MVMM(nn.Module):
         self.module_list = []
 
         name = 'rv_backbone'
-        if cfg.get(name, None) is None:
+        if cfg.get(name) is None:
             self.num_rv_features = 0
         else:
             rv_backbone = rv_backbones.__all__[cfg[name]['type']](

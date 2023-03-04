@@ -24,7 +24,7 @@ from ops.roiaware_pool3d.roiaware_pool3d_utils import points_in_boxes_cpu
 
 
 class KITTIDataset(torch.utils.data.Dataset):
-    def __init__(self, cfg, split, augment_data=True, create_kitti_infos=False):
+    def __init__(self, cfg, split, is_training=True, augment_data=True, create_kitti_infos=False):
         self.root_dir = 'data/kitti'
         self.split = split
 
@@ -52,12 +52,13 @@ class KITTIDataset(torch.utils.data.Dataset):
         self.write_list = cfg['write_list']
         self.point_cloud_range = np.array(cfg['point_cloud_range'], dtype=np.float32)
 
+        self.is_training = is_training
         self.augment_data = augment_data
         if self.split not in ['train', 'trainval']:
             self.augment_data = False
 
         self.range_convertor = RangeConvertor(cfg['range_image'])
-        if self.augment_data and cfg.get('augmentor_list', None) is not None:
+        if self.augment_data and cfg.get('augmentor_list') is not None:
             self.data_augmentor = DataAugmentor(
                 cfg['augmentor_list'], self.root_dir, self.class_names, self.range_convertor
             )
@@ -289,7 +290,7 @@ class KITTIDataset(torch.utils.data.Dataset):
             data_dict['gt_boxes'] = mask_boxes3d_by_range(data_dict['gt_boxes'], self.point_cloud_range)
             data_dict['colored_points'] = mask_points_by_range(data_dict['colored_points'], self.point_cloud_range)
         
-        if self.split in ['train', 'trainval']:
+        if self.is_training:
             if len(data_dict['gt_boxes']) == 0:
                 return self.__getitem__(np.random.randint(self.__len__()))
                 
@@ -374,25 +375,25 @@ if __name__ == '__main__':
     if sys.argv.__len__() > 1 and sys.argv[1] == 'create_kitti_infos':
         print('==> Generating data info files...')
 
-        dataset = KITTIDataset(cfg={}, split='train', augment_data=False, create_kitti_infos=True)
+        dataset = KITTIDataset(cfg={}, split='train', create_kitti_infos=True)
         train_infos = dataset.get_infos(has_label=True, count_inside_pts=True)
         with open(dataset.info_file, 'wb') as f:
             pickle.dump(train_infos, f)
         print('==> The info file for `train.txt` is saved to: %s' % dataset.info_file)
 
-        dataset = KITTIDataset(cfg={}, split='val', augment_data=False, create_kitti_infos=True)
+        dataset = KITTIDataset(cfg={}, split='val', create_kitti_infos=True)
         val_infos = dataset.get_infos(has_label=True, count_inside_pts=True)
         with open(dataset.info_file, 'wb') as f:
             pickle.dump(val_infos, f)
         print('==> The info file for `val.txt` is saved to: %s' % dataset.info_file)
 
-        dataset = KITTIDataset(cfg={}, split='test', augment_data=False, create_kitti_infos=True)
+        dataset = KITTIDataset(cfg={}, split='test', create_kitti_infos=True)
         test_infos = dataset.get_infos(has_label=False, count_inside_pts=False)
         with open(dataset.info_file, 'wb') as f:
             pickle.dump(test_infos, f)
         print('==> The info file for `test.txt` is saved to: %s' % dataset.info_file)
 
-        dataset = KITTIDataset(cfg={}, split='trainval', augment_data=False, create_kitti_infos=True)
+        dataset = KITTIDataset(cfg={}, split='trainval', create_kitti_infos=True)
         trainval_infos = train_infos + val_infos
         with open(dataset.info_file, 'wb') as f:
             pickle.dump(trainval_infos, f)
@@ -400,10 +401,10 @@ if __name__ == '__main__':
         
         print('==> Generating ground truth databases...')
 
-        dataset = KITTIDataset(cfg={}, split='train', augment_data=False, create_kitti_infos=True)
+        dataset = KITTIDataset(cfg={}, split='train', create_kitti_infos=True)
         dataset.create_gt_database()
 
-        dataset = KITTIDataset(cfg={}, split='trainval', augment_data=False, create_kitti_infos=True)
+        dataset = KITTIDataset(cfg={}, split='trainval', create_kitti_infos=True)
         dataset.create_gt_database()
 
         print('==> Done.')
