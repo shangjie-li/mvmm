@@ -797,7 +797,10 @@ def clean_data(gt_anno, dt_anno, current_class, difficulty, use_ldf_eval=False):
             valid_class = -1
 
         if use_ldf_eval:
-            if valid_class == 1:
+            distance = (dt_anno["location"][i, 0] ** 2 + dt_anno["location"][i, 2] ** 2) ** 0.5
+            if distance < MIN_DISTANCE[difficulty] or distance >= MAX_DISTANCE[difficulty]:
+                ignored_dt.append(1)
+            elif valid_class == 1:
                 ignored_dt.append(0)
             else:
                 ignored_dt.append(-1)
@@ -1094,12 +1097,16 @@ def get_official_eval_result(gt_annos, dt_annos, current_classes, use_ldf_eval=F
                             [0.7, 0.5, 0.5, 0.7, 0.5, 0.7],  # metric 1: bev
                             [0.7, 0.5, 0.5, 0.7, 0.5, 0.7],  # metric 2: 3d
                             ])
-    overlap_0_5 = np.array([[0.7, 0.5, 0.5, 0.7, 0.5, 0.5],
+    overlap_0_5 = np.array([[0.7, 0.5, 0.5, 0.7, 0.5, 0.7],
                             [0.5, 0.25, 0.25, 0.5, 0.25, 0.5],
                             [0.5, 0.25, 0.25, 0.5, 0.25, 0.5],
                             ])
+    overlap_0_2 = np.array([[0.7, 0.5, 0.5, 0.7, 0.5, 0.7],
+                            [0.25, 0.1, 0.1, 0.25, 0.1, 0.25],
+                            [0.25, 0.1, 0.1, 0.25, 0.1, 0.25],
+                            ])
     # min_overlaps: ndarray of float, [num_minoverlap, num_metric, num_class]
-    min_overlaps = np.stack([overlap_0_7, overlap_0_5], axis=0)
+    min_overlaps = np.stack([overlap_0_7, overlap_0_5, overlap_0_2], axis=0)
     min_overlaps = min_overlaps[:, :, current_classes]
 
     if use_ldf_eval:

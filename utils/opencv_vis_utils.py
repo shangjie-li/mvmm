@@ -122,15 +122,15 @@ def draw_boxes3d(img, calib, boxes3d, names=None, color=(0, 255, 0), thickness=2
 
     """
     corners = boxes3d_to_corners3d(boxes3d)  # [N, 8, 3]
-    for i in range(boxes3d.shape[0]):
-        pts = corners[i]
+    for m in range(boxes3d.shape[0]):
+        pts = corners[m]
         pts_img, pts_depth = calib.lidar_to_img(pts)
 
         if (pts_depth > 0).sum() < 8:
             continue
 
         if names is not None:
-            color = box_colormap[names[i]]
+            color = box_colormap[names[m]]
 
         pts_img = pts_img.astype(np.int)
         cv2.line(img, (pts_img[0, 0], pts_img[0, 1]), (pts_img[5, 0], pts_img[5, 1]), color, thickness)
