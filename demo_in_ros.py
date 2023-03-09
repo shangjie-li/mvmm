@@ -68,7 +68,7 @@ def parse_config():
     return args
 
 
-def publish_marker_msg(pub, boxes, labels, frame_id, frame_rate, color_map):
+def publish_marker_msg(pub, boxes, labels, scores, frame_id, frame_rate, color_map):
     markerarray = MarkerArray()
     for i in range(boxes.shape[0]):
         marker = Marker()
@@ -95,7 +95,7 @@ def publish_marker_msg(pub, boxes, labels, frame_id, frame_rate, color_map):
         marker.color.r = color_map[labels[i]][2] / 255.0
         marker.color.g = color_map[labels[i]][1] / 255.0
         marker.color.b = color_map[labels[i]][0] / 255.0
-        marker.color.a = 0.75  # 0 for invisible
+        marker.color.a = scores[i]  # 0 for invisible
         
         marker.lifetime = rospy.Duration(1 / frame_rate)
         markerarray.markers.append(marker)
@@ -115,7 +115,7 @@ def display(img, v_writer, win_name='result'):
         return True
 
 
-def print_info(frame, stamp, delay, labels, scores, boxes, file_name='result.txt'):
+def print_info(frame, stamp, delay, boxes, labels, scores, file_name='result.txt'):
     time_str = 'frame:%d  stamp:%.3f  delay:%.3f' % (frame, stamp, delay)
     print(time_str)
     with open(file_name, 'a') as fob:
@@ -217,7 +217,7 @@ def timer_callback(event):
     pred_scores = batch_dict['pred_scores'][0].cpu().numpy()  # [M]
     pred_names = [dataset.class_names[int(k - 1)] for k in pred_classes]
 
-    publish_marker_msg(pub_marker, pred_boxes, pred_names, args.frame_id, args.frame_rate, box_colormap)
+    publish_marker_msg(pub_marker, pred_boxes, pred_names, pred_scores, args.frame_id, args.frame_rate, box_colormap)
 
     if args.display:
         image = normalize_img(cur_image)
@@ -230,7 +230,7 @@ def timer_callback(event):
         cur_stamp = rospy.Time.now()
         cur_stamp = cur_stamp.secs + 0.000000001 * cur_stamp.nsecs
         delay = round(time.time() - start, 3)
-        print_info(frame, cur_stamp, delay, pred_names, pred_scores, pred_boxes, result_file)
+        print_info(frame, cur_stamp, delay, pred_boxes, pred_names, pred_scores, result_file)
 
 
 if __name__ == '__main__':
