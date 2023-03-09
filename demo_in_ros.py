@@ -52,6 +52,8 @@ def parse_config():
                         help='NMS threshold for filtering detections')
     parser.add_argument('--checkpoint', type=str, default=None,
                         help='path to the checkpoint')
+    parser.add_argument('--current_classes', type=str, default='0,1,2',
+                        help='a filter for desired classes, e.g., 0,1,2 (split by a comma)')
     parser.add_argument('--sub_image', type=str, default='/kitti/camera_color_left/image_raw',
                         help='image topic to subscribe')
     parser.add_argument('--sub_lidar', type=str, default='/kitti/velo/pointcloud',
@@ -215,7 +217,11 @@ def timer_callback(event):
     pred_boxes = batch_dict['pred_boxes'][0].cpu().numpy()  # [M, 7]
     pred_classes = batch_dict['pred_classes'][0].cpu().numpy()  # [M]
     pred_scores = batch_dict['pred_scores'][0].cpu().numpy()  # [M]
-    pred_names = [dataset.class_names[int(k - 1)] for k in pred_classes]
+
+    pred_cls_ids = pred_classes.astype(np.int) - 1
+    indices = [i for i, cls_id in enumerate(pred_cls_ids) if cls_id in args.current_classes]
+    pred_boxes, pred_cls_ids, pred_scores = pred_boxes[indices], pred_cls_ids[indices], pred_scores[indices]
+    pred_names = [dataset.class_names[k] for k in pred_cls_ids]
 
     publish_marker_msg(pub_marker, pred_boxes, pred_names, pred_scores, args.frame_id, args.frame_rate, box_colormap)
 
@@ -244,6 +250,8 @@ if __name__ == '__main__':
         cfg['tester']['nms_thresh'] = args.nms_thresh
     if args.checkpoint is not None:
         cfg['tester']['checkpoint'] = args.checkpoint
+
+    args.current_classes = list(map(int, args.current_classes.split(',')))
 
     rospy.init_node("mvmm", anonymous=True, disable_signals=True)
     frame = 0
