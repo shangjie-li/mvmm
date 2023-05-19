@@ -191,8 +191,8 @@ def timer_callback(event):
     cur_header = Header()
 
     image_lock.acquire()
-    cur_header.frame_id = image_header.frame_id
-    cur_header.stamp = image_header.stamp
+    cur_header.frame_id = lidar_header.frame_id
+    cur_header.stamp = lidar_header.stamp
     cur_image = image_frame.copy()
     image_lock.release()
 
